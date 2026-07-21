@@ -209,7 +209,20 @@ def seed_from_file_if_empty(cache_file: Path) -> None:
 
 def seed_bundled_cache() -> int:
     """Upsert shipped room_cache_seed.json on every boot (fills Railway DB cache)."""
-    bundled = Path(__file__).resolve().parent.parent / "seed" / "room_cache_seed.json"
-    if not bundled.is_file():
+    here = Path(__file__).resolve()
+    # Docker: /app/app/services/... → parents[2] == /app (seed copied to /app/seed)
+    # Local:  backend/app/services/... → parents[2] == backend (seed at backend/seed)
+    candidates = [
+        here.parents[2] / "seed" / "room_cache_seed.json",
+        here.parents[1] / "seed" / "room_cache_seed.json",
+        Path("/app/seed/room_cache_seed.json"),
+    ]
+    bundled = next((p for p in candidates if p.is_file()), None)
+    if bundled is None:
+        logger.warning(
+            "Bundled room cache seed not found (tried: %s)",
+            ", ".join(str(p) for p in candidates),
+        )
         return 0
+    logger.info("Loading bundled room cache seed from %s", bundled)
     return import_json_file(bundled)
