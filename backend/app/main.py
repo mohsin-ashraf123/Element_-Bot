@@ -53,11 +53,27 @@ async def lifespan(app: FastAPI):
     from app.services.matrix_trust import run_trust_check
     from app.services.scheduler_service import start as start_scheduler
 
+    def _startup_matrix() -> None:
+        """Login, join rooms, and warm E2EE as early as possible on Railway."""
+        import time
+
+        time.sleep(3)
+        try:
+            from app.services import element_health, matrix_client
+
+            if matrix_client.is_configured():
+                matrix_client.get_session()
+                matrix_client.ensure_joined_room()
+                element_health.check(force=True)
+                log.info("Matrix startup: joined rooms and refreshed health")
+        except Exception as exc:
+            log.warning("Matrix startup skipped: %s", exc)
+
     def _startup_warm() -> None:
         # Defer heavy Matrix E2EE work so login/API stay responsive on boot.
         import time
 
-        time.sleep(20)
+        time.sleep(8)
         warm_store()
         try:
             from app.db.session import SessionLocal
@@ -92,6 +108,7 @@ async def lifespan(app: FastAPI):
 
         element_health.check(force=True)
 
+    threading.Thread(target=_startup_matrix, daemon=True, name="matrix-startup").start()
     threading.Thread(target=_startup_warm, daemon=True, name="e2ee-warm").start()
     threading.Thread(target=_deferred_trust, daemon=True, name="matrix-trust").start()
     threading.Thread(target=_warm_health, daemon=True, name="matrix-health").start()

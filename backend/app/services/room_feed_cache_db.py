@@ -150,3 +150,11 @@ def seed_from_file_if_empty(cache_file: Path) -> None:
     finally:
         db.close()
     import_json_file(cache_file)
+
+
+def seed_bundled_cache() -> int:
+    """Upsert shipped room_cache_seed.json on every boot (fills Railway DB cache)."""
+    bundled = Path(__file__).resolve().parent.parent / "seed" / "room_cache_seed.json"
+    if not bundled.is_file():
+        return 0
+    return import_json_file(bundled)

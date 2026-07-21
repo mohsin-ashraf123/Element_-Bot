@@ -6,6 +6,8 @@ project moves toward production (ARCHITECTURE §3.2, Phase 0).
 
 from __future__ import annotations
 
+import logging
+
 from sqlalchemy import select
 
 from app.db.base import Base, SessionLocal, engine
@@ -49,3 +51,6 @@ def init_db() -> None:
 
     cache_file = Path(settings.matrix_e2ee_store_path).resolve().parent / "member_feed_cache.json"
     room_feed_cache_db.seed_from_file_if_empty(cache_file)
+    count = room_feed_cache_db.seed_bundled_cache()
+    if count:
+        logging.getLogger(__name__).info("Bundled room message seed: %d message(s)", count)

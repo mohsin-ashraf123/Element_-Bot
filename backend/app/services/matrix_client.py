@@ -8,6 +8,7 @@ successful login.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,7 +18,15 @@ import httpx
 
 from app.core.config import settings
 
-_SESSION_PATH = Path("./data/matrix_session.json")
+logger = logging.getLogger(__name__)
+
+
+def _data_dir() -> Path:
+    return Path(settings.matrix_e2ee_store_path).resolve().parent
+
+
+def _session_path() -> Path:
+    return _data_dir() / "matrix_session.json"
 
 
 @dataclass
@@ -125,10 +134,11 @@ def _parse_matrix_error(resp: httpx.Response) -> str:
 
 
 def _load_persisted_session() -> MatrixSession | None:
-    if not _SESSION_PATH.exists():
+    path = _session_path()
+    if not path.exists():
         return None
     try:
-        data = json.loads(_SESSION_PATH.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
         return MatrixSession(
             access_token=data["access_token"],
             device_id=data["device_id"],
@@ -139,8 +149,9 @@ def _load_persisted_session() -> MatrixSession | None:
 
 
 def _persist_session(session: MatrixSession) -> None:
-    _SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _SESSION_PATH.write_text(
+    path = _session_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
         json.dumps(
             {
                 "access_token": session.access_token,
@@ -449,6 +460,20 @@ def health_check(*, force: bool = False) -> dict:
         base["task_room_id"] = task_id
         base["task_room_label"] = _room_label(task_id) if task_id else None
         base["task_room_joined"] = task_id in joined if task_id else None
+        if not base["joined"]:
+            try:
+                ensure_room_joined(settings.matrix_room_id, sess)
+                joined = joined_rooms(sess)
+                base["joined"] = settings.matrix_room_id in joined
+            except Exception as join_exc:
+                logger.warning("Pairing room join retry failed: %s", join_exc)
+        if task_id and not base.get("task_room_joined"):
+            try:
+                ensure_room_joined(task_id, sess)
+                joined = joined_rooms(sess)
+                base["task_room_joined"] = task_id in joined
+            except Exception as join_exc:
+                logger.warning("Task room join retry failed: %s", join_exc)
         store = Path(e2ee_store_for_device(sess.device_id))
         base["e2ee_store_ready"] = store.exists() and bool(
             settings.matrix_pickle_key or settings.matrix_recovery_key

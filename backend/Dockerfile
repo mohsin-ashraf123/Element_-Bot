@@ -20,6 +20,7 @@ ARG SKIP_PLAYWRIGHT=1
 RUN if [ "$SKIP_PLAYWRIGHT" = "0" ]; then playwright install --with-deps chromium; fi
 
 COPY app ./app
+COPY seed ./seed
 
 RUN mkdir -p /app/data/matrix_store /app/data/reports
 
