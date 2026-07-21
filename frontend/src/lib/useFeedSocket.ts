@@ -8,8 +8,10 @@ export function useFeedSocket(onFeed: (feed: DashboardFeed) => void) {
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) return;
 
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${proto}//${window.location.host}/api/dashboard/feed/ws?token=${encodeURIComponent(token)}`;
+    const apiBase = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "")
+      || `${window.location.origin}/api`;
+    const wsBase = apiBase.replace(/^http/i, "ws");
+    const url = `${wsBase}/dashboard/feed/ws?token=${encodeURIComponent(token)}`;
     let ws: WebSocket | null = null;
     let pingId: number | undefined;
     let retryId: number | undefined;

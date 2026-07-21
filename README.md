@@ -13,7 +13,7 @@ PairFlow — Element team pairing & daily review automation (Matrix bot + contro
 | Service | URL |
 |---------|-----|
 | Frontend | https://frontend-rho-pied-deqalmapg4.vercel.app |
-| Backend API | `https://element-bot-api.fly.dev` (after Fly deploy) |
+| Backend API | https://pairflow-api-production.up.railway.app |
 
 ## Local dev
 
