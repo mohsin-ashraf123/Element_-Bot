@@ -1,20 +1,26 @@
-# PairFlow API — production container (Render / Railway / Fly.io)
+# PairFlow API — production container (Railway / Render / Fly.io)
 FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
-# libolm + build deps for matrix-nio E2EE
+# System libolm — python3-olm binds to these headers/libs (do not build bundled olm from sdist)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libolm-dev \
+    libolm3 \
+    pkg-config \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Playwright for report PNGs (optional on tiny VMs — set SKIP_PLAYWRIGHT=1 to omit)
-ARG SKIP_PLAYWRIGHT=0
+# Olm Python bindings: PEP517 isolated builds miss interface-include/ — use system libolm
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel cffi \
+    && pip install --no-cache-dir --no-build-isolation "python3-olm>=3.2.20" \
+    && pip install --no-cache-dir -r requirements.txt
+
+# Playwright is heavy — skip on small Railway/Fly VMs: docker build --build-arg SKIP_PLAYWRIGHT=1
+ARG SKIP_PLAYWRIGHT=1
 RUN if [ "$SKIP_PLAYWRIGHT" = "0" ]; then playwright install --with-deps chromium; fi
 
 COPY app ./app
@@ -28,7 +34,7 @@ ENV APP_ENV=production \
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
   CMD curl -f http://127.0.0.1:8000/api/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
