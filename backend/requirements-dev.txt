@@ -1,0 +1,2 @@
+# Local dev only (Windows) — Docker/Railway installs python-olm from Matrix GitLab wheels
+python3-olm>=3.2.20

@@ -16,6 +16,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
+        populate_by_name=True,
     )
 
     # ── App / environment ────────────────────────────────
@@ -34,6 +35,8 @@ class Settings(BaseSettings):
     secrets_encryption_key: str = ""
 
     # ── Database (PostgreSQL) ────────────────────────────
+    # Railway sets DATABASE_URL; local dev uses DB_* fields
+    database_url_override: str = Field(default="", validation_alias="DATABASE_URL")
     db_host: str = "localhost"
     db_port: int = 5432
     db_name: str = "element_bot"
@@ -75,6 +78,13 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """SQLAlchemy connection string (sync psycopg2 driver)."""
+        raw = (self.database_url_override or "").strip()
+        if raw:
+            if raw.startswith("postgres://"):
+                raw = "postgresql://" + raw[len("postgres://") :]
+            if raw.startswith("postgresql://"):
+                return "postgresql+psycopg2://" + raw[len("postgresql://") :]
+            return raw
         return (
             f"postgresql+psycopg2://{self.db_user}:{self.db_password}"
             f"@{self.db_host}:{self.db_port}/{self.db_name}"
