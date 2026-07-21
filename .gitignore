@@ -1,0 +1,26 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+backend/.env
+*.log
+.DS_Store
+Thumbs.db
+.vercel
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Runtime data (E2EE store, generated report images)
+backend/data/
+backend/report_images/
+
+# IDE
+.cursor/
+assets/

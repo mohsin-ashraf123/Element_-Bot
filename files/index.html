@@ -1,0 +1,908 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PairFlow — Control Panel</title>
+<style>
+  :root{
+    --bg:#F2F2F7; --sidebar:rgba(246,246,248,.72); --card:#FFFFFF; --card2:#FBFBFD;
+    --text:#1D1D1F; --text2:#6E6E73; --text3:#98989D;
+    --hairline:rgba(0,0,0,.08); --hairline2:rgba(0,0,0,.045);
+    --accent:#0A84FF; --accent-weak:rgba(10,132,255,.12);
+    --green:#34C759; --orange:#FF9F0A; --red:#FF3B30; --purple:#5E5CE6;
+    --shadow:0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.06);
+    --shadow-lg:0 1px 2px rgba(0,0,0,.05), 0 24px 60px rgba(0,0,0,.10);
+    --radius:22px; --radius-sm:14px;
+    --ease:cubic-bezier(.32,.72,0,1);
+    --grad-a:linear-gradient(135deg,#0A84FF,#5E5CE6);
+    --grad-b:linear-gradient(135deg,#FF9F0A,#FF3B30);
+    --grad-c:linear-gradient(135deg,#34C759,#30D0B0);
+    --grad-d:linear-gradient(135deg,#FF375F,#FF7Aa0);
+  }
+  [data-theme="dark"]{
+    --bg:#0B0B0F; --sidebar:rgba(26,26,30,.72); --card:#1C1C1E; --card2:#161618;
+    --text:#F5F5F7; --text2:#A1A1A6; --text3:#7C7C82;
+    --hairline:rgba(255,255,255,.10); --hairline2:rgba(255,255,255,.06);
+    --accent:#0A84FF; --accent-weak:rgba(10,132,255,.20);
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px rgba(0,0,0,.5);
+    --shadow-lg:0 1px 2px rgba(0,0,0,.5), 0 30px 70px rgba(0,0,0,.6);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Inter,system-ui,sans-serif;
+    background:var(--bg); color:var(--text); letter-spacing:-.01em;
+    -webkit-font-smoothing:antialiased; transition:background .5s var(--ease),color .5s var(--ease);
+    overflow:hidden;
+  }
+  .app{display:grid; grid-template-columns:250px 1fr; height:100vh}
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{
+    background:var(--sidebar); -webkit-backdrop-filter:saturate(180%) blur(30px);
+    backdrop-filter:saturate(180%) blur(30px);
+    border-right:1px solid var(--hairline); padding:22px 14px; display:flex; flex-direction:column; gap:4px;
+    transition:background .5s var(--ease),border-color .5s var(--ease);
+  }
+  .brand{display:flex; align-items:center; gap:11px; padding:6px 10px 20px}
+  .brand .logo{
+    width:34px;height:34px;border-radius:10px;background:var(--grad-a);display:grid;place-items:center;
+    box-shadow:0 6px 16px rgba(10,132,255,.35);
+  }
+  .brand .logo svg{width:20px;height:20px;color:#fff}
+  .brand b{font-size:16.5px;font-weight:650;letter-spacing:-.02em}
+  .brand small{display:block;font-size:11px;color:var(--text3);font-weight:500;margin-top:1px}
+  .navlbl{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;padding:14px 12px 6px}
+  .nav{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:11px;cursor:pointer;
+    color:var(--text2);font-size:14px;font-weight:500;position:relative;
+    transition:background .25s var(--ease),color .25s var(--ease),transform .1s var(--ease);}
+  .nav svg{width:19px;height:19px;flex:none;transition:color .25s var(--ease)}
+  .nav:hover{background:var(--hairline2);color:var(--text)}
+  .nav:active{transform:scale(.98)}
+  .nav.active{background:var(--card);color:var(--text);box-shadow:var(--shadow);font-weight:560}
+  .nav.active svg{color:var(--accent)}
+  .nav .badge{margin-left:auto;background:var(--red);color:#fff;font-size:11px;font-weight:600;
+    min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 5px}
+  .side-foot{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px 8px 2px;border-top:1px solid var(--hairline);}
+  .avatar{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:600;flex:none}
+  .side-foot .who{font-size:13px;font-weight:560;line-height:1.15}
+  .side-foot .who small{color:var(--text3);font-weight:500;font-size:11px}
+  .theme-btn{margin-left:auto;width:32px;height:32px;border-radius:9px;border:1px solid var(--hairline);
+    background:transparent;color:var(--text2);display:grid;place-items:center;cursor:pointer;transition:.25s var(--ease)}
+  .theme-btn:hover{background:var(--hairline2);color:var(--text)}
+  .theme-btn svg{width:17px;height:17px}
+
+  /* ---------- Main ---------- */
+  .main{overflow-y:auto;overflow-x:hidden;height:100vh}
+  .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;
+    padding:20px 34px 14px;background:linear-gradient(var(--bg),var(--bg) 70%,transparent);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  .topbar h1{font-size:26px;font-weight:680;letter-spacing:-.03em}
+  .topbar .sub{color:var(--text3);font-size:13px;margin-top:2px;font-weight:500}
+  .statuspill{margin-left:auto;display:flex;align-items:center;gap:8px;background:var(--card);
+    border:1px solid var(--hairline);border-radius:999px;padding:7px 14px 7px 12px;font-size:13px;font-weight:560;box-shadow:var(--shadow)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--green);position:relative}
+  .dot::after{content:"";position:absolute;inset:-4px;border-radius:50%;background:var(--green);opacity:.35;animation:pulse 2s var(--ease) infinite}
+  @keyframes pulse{0%{transform:scale(.6);opacity:.5}70%{transform:scale(1.9);opacity:0}100%{opacity:0}}
+  .btn{border:none;border-radius:11px;padding:9px 15px;font-size:13.5px;font-weight:560;cursor:pointer;
+    font-family:inherit;display:inline-flex;align-items:center;gap:7px;transition:transform .12s var(--ease),filter .2s var(--ease),background .2s var(--ease)}
+  .btn svg{width:16px;height:16px}
+  .btn:active{transform:scale(.96)}
+  .btn.primary{background:var(--accent);color:#fff;box-shadow:0 6px 16px rgba(10,132,255,.3)}
+  .btn.primary:hover{filter:brightness(1.06)}
+  .btn.ghost{background:var(--card);color:var(--text);border:1px solid var(--hairline)}
+  .btn.ghost:hover{background:var(--hairline2)}
+
+  .content{padding:8px 34px 60px;max-width:1180px}
+  .view{display:none}
+  .view.active{display:block}
+  .view.active .reveal{animation:rise .6s var(--ease) both}
+  .reveal:nth-child(1){animation-delay:.02s}.reveal:nth-child(2){animation-delay:.07s}
+  .reveal:nth-child(3){animation-delay:.12s}.reveal:nth-child(4){animation-delay:.17s}
+  .reveal:nth-child(5){animation-delay:.22s}.reveal:nth-child(6){animation-delay:.27s}
+  @keyframes rise{from{opacity:0;transform:translateY(14px) scale(.99)}to{opacity:1;transform:none}}
+
+  /* ---------- Cards ---------- */
+  .grid{display:grid;gap:18px}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .g2{grid-template-columns:1.35fr 1fr}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .card{background:var(--card);border:1px solid var(--hairline2);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:20px;transition:transform .3s var(--ease),box-shadow .3s var(--ease),background .5s var(--ease)}
+  .card.hover:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
+  .stat .ico{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:#fff;margin-bottom:14px}
+  .stat .ico svg{width:20px;height:20px}
+  .stat .lbl{color:var(--text2);font-size:12.5px;font-weight:560;letter-spacing:0}
+  .stat .val{font-size:24px;font-weight:700;letter-spacing:-.03em;margin-top:3px}
+  .stat .meta{font-size:12px;color:var(--text3);margin-top:5px;font-weight:500;display:flex;align-items:center;gap:5px}
+  .cap{font-size:13px;font-weight:640;letter-spacing:-.01em;display:flex;align-items:center;gap:8px;margin-bottom:16px}
+  .cap .tag{margin-left:auto;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-weak);
+    padding:4px 9px;border-radius:7px;letter-spacing:0}
+  .tag.green{color:var(--green);background:rgba(52,199,89,.14)}
+  .tag.gray{color:var(--text2);background:var(--hairline2)}
+
+  /* pair rows */
+  .pair{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--hairline2)}
+  .pair:last-child{border:none}
+  .pair .who{display:flex;align-items:center;gap:9px;font-size:14px;font-weight:560}
+  .pair .plus{color:var(--text3);font-weight:400;margin:0 2px}
+  .pair .rt{margin-left:auto;font-size:12px;font-weight:560;color:var(--text2)}
+  .mini-av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:650}
+  .lead-line{margin-top:14px;padding:12px 14px;background:var(--accent-weak);border-radius:14px;
+    font-size:13.5px;font-weight:560;display:flex;align-items:center;gap:9px;color:var(--text)}
+  .lead-line svg{width:17px;height:17px;color:var(--accent)}
+
+  /* iMessage bubbles (signature) */
+  .phone{background:var(--card2);border:1px solid var(--hairline2);border-radius:22px;padding:16px;height:100%;display:flex;flex-direction:column}
+  .room-head{display:flex;align-items:center;gap:10px;padding-bottom:12px;border-bottom:1px solid var(--hairline2);margin-bottom:14px}
+  .room-head .rname{font-size:13.5px;font-weight:640}
+  .room-head .rmeta{font-size:11px;color:var(--text3);font-weight:500}
+  .bubbles{display:flex;flex-direction:column;gap:9px;flex:1}
+  .bubble{max-width:86%;padding:11px 14px;border-radius:19px;font-size:13px;line-height:1.5;
+    background:var(--grad-a);color:#fff;align-self:flex-end;border-bottom-right-radius:6px;
+    box-shadow:0 6px 16px rgba(10,132,255,.28);white-space:pre-line;animation:pop .5s var(--ease) both}
+  .bubble.them{background:var(--hairline2);color:var(--text);align-self:flex-start;border-bottom-left-radius:6px;border-bottom-right-radius:19px;box-shadow:none}
+  @keyframes pop{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
+  .stamp{font-size:10.5px;color:var(--text3);align-self:flex-end;margin-top:-3px;font-weight:500}
+  .typing{align-self:flex-start;background:var(--hairline2);border-radius:16px;padding:11px 14px;display:none;gap:4px}
+  .typing span{width:6px;height:6px;border-radius:50%;background:var(--text3);animation:bounce 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.15s}.typing span:nth-child(3){animation-delay:.3s}
+  @keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-5px);opacity:1}}
+
+  /* report chips */
+  .chips{display:flex;flex-wrap:wrap;gap:10px}
+  .chip{display:flex;align-items:center;gap:8px;background:var(--card2);border:1px solid var(--hairline2);
+    border-radius:999px;padding:6px 13px 6px 6px;font-size:13px;font-weight:560;transition:.25s var(--ease)}
+  .chip:hover{border-color:var(--hairline)}
+  .cdot{width:8px;height:8px;border-radius:50%}
+  .s-ok{background:var(--green)}.s-late{background:var(--orange)}.s-wait{background:var(--text3)}.s-und{background:var(--purple)}
+
+  /* list rows */
+  .row{display:flex;align-items:center;gap:14px;padding:13px 6px;border-bottom:1px solid var(--hairline2)}
+  .row:last-child{border:none}
+  .row .name{font-weight:560;font-size:14px}
+  .row .desc{color:var(--text3);font-size:12px;font-weight:500;margin-top:1px}
+  .roletag{font-size:11px;font-weight:600;padding:4px 9px;border-radius:7px}
+  .rt-dev{color:var(--accent);background:var(--accent-weak)}
+  .rt-qa{color:var(--purple);background:rgba(94,92,230,.14)}
+  .rt-lead{color:var(--orange);background:rgba(255,159,10,.15)}
+
+  /* iOS toggle */
+  .switch{width:46px;height:28px;border-radius:999px;background:var(--hairline);position:relative;cursor:pointer;
+    transition:background .3s var(--ease);flex:none}
+  .switch.on{background:var(--green)}
+  .switch::after{content:"";position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;background:#fff;
+    box-shadow:0 2px 5px rgba(0,0,0,.25);transition:transform .3s var(--ease)}
+  .switch.on::after{transform:translateX(18px)}
+
+  /* table */
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--text3);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding:0 10px 12px}
+  td{padding:13px 10px;border-top:1px solid var(--hairline2);font-weight:500}
+  tr td:first-child{font-weight:560}
+  .status-badge{font-size:11.5px;font-weight:600;padding:4px 9px;border-radius:7px;display:inline-flex;align-items:center;gap:5px}
+  .sb-ok{color:var(--green);background:rgba(52,199,89,.14)}
+  .sb-fail{color:var(--red);background:rgba(255,59,48,.14)}
+  .sb-run{color:var(--accent);background:var(--accent-weak)}
+
+  .combo-badge{font-size:11px;font-weight:700;color:#fff;background:var(--grad-a);padding:3px 8px;border-radius:6px}
+
+  .metric-tbl td,.metric-tbl th{padding:11px 12px}
+  .bar{height:6px;border-radius:3px;background:var(--hairline);overflow:hidden;width:100%;max-width:120px}
+  .bar i{display:block;height:100%;border-radius:3px;background:var(--grad-c)}
+
+  .banner{display:flex;align-items:center;gap:10px;background:rgba(255,159,10,.12);border:1px solid rgba(255,159,10,.3);
+    color:#8a5a00;border-radius:12px;padding:11px 14px;font-size:12.5px;font-weight:560}
+  [data-theme="dark"] .banner{color:#FFCF80}
+  .banner svg{width:17px;height:17px;flex:none}
+
+  .od{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;color:var(--orange);
+    background:rgba(255,159,10,.14);padding:3px 7px;border-radius:6px;letter-spacing:.02em}
+
+  .field{display:flex;align-items:center;justify-content:space-between;padding:14px 4px;border-bottom:1px solid var(--hairline2)}
+  .field:last-child{border:none}
+  .field .fl{font-size:14px;font-weight:540}.field .fd{font-size:12px;color:var(--text3);margin-top:2px;font-weight:500}
+  .pillbtns{display:flex;gap:7px}
+  .pillbtn{font-size:12.5px;font-weight:560;padding:7px 12px;border-radius:9px;border:1px solid var(--hairline);
+    background:transparent;color:var(--text2);cursor:pointer;transition:.2s var(--ease)}
+  .pillbtn.on{background:var(--accent);color:#fff;border-color:transparent}
+  .day{width:34px;height:34px;border-radius:9px;border:1px solid var(--hairline);display:grid;place-items:center;
+    font-size:12px;font-weight:600;color:var(--text2);cursor:pointer}
+  .day.on{background:var(--accent);color:#fff;border-color:transparent}
+  .day.off{opacity:.4}
+  .masked{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;color:var(--text2);
+    background:var(--hairline2);padding:5px 10px;border-radius:8px}
+
+  /* sender label on bubbles */
+  .sender{font-size:10.5px;color:var(--text3);font-weight:600;align-self:flex-start;margin:4px 0 -5px 4px}
+
+  /* report document (what gets screenshotted & posted as an image) */
+  .report-doc{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;overflow:hidden;box-shadow:var(--shadow)}
+  .report-doc,.report-doc *{color:#1d1d1f}
+  .rd-head{background:linear-gradient(135deg,#0A84FF,#5E5CE6);padding:15px 18px}
+  .rd-head,.rd-head *{color:#fff}
+  .rd-head b{font-size:15px;font-weight:680}.rd-head small{opacity:.9;font-size:11.5px}
+  .rd-body{padding:14px 18px}
+  .rd-body table{width:100%;border-collapse:collapse;font-size:12.5px}
+  .rd-body th{color:#8e8e93;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;padding:0 8px 10px;font-weight:600}
+  .rd-body td{padding:10px 8px;border-top:1px solid rgba(0,0,0,.07);font-weight:500}
+  .rd-body tr td:first-child{font-weight:600}
+  .rd-foot{padding:11px 18px;border-top:1px solid rgba(0,0,0,.07);font-size:11px;color:#8e8e93;font-weight:500}
+  .pct{font-weight:600}.pct.hi{color:#34C759}.pct.mid{color:#FF9F0A}.pct.lo{color:#FF3B30}
+  .img-note{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text3);font-weight:500;margin-top:14px}
+  .img-note svg{width:15px;height:15px;color:var(--accent)}
+
+  /* image-style bubble (report posted as picture) */
+  .bubble.imgcard{background:var(--card2);border:1px solid var(--hairline2);padding:0;overflow:hidden;max-width:96%;box-shadow:var(--shadow)}
+  .bubble.imgcard .report-doc{border:none;border-radius:0;box-shadow:none}
+  .bubble.imgcard .cap-img{font-size:10px;color:var(--text3);font-weight:600;padding:7px 12px;background:var(--card);display:flex;align-items:center;gap:6px}
+  .bubble.imgcard .cap-img svg{width:12px;height:12px}
+
+  /* modal */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    display:none;place-items:center;z-index:100;animation:fade .3s var(--ease);padding:20px}
+  .modal-backdrop.show{display:grid}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal{background:var(--card);border:1px solid var(--hairline);border-radius:22px;padding:24px;width:min(440px,100%);
+    box-shadow:var(--shadow-lg);animation:rise .4s var(--ease);max-height:88vh;overflow-y:auto}
+  .modal h3{font-size:19px;font-weight:700;margin-bottom:5px;letter-spacing:-.02em}
+  .modal .msub{font-size:13px;color:var(--text3);margin-bottom:20px;font-weight:500}
+  .inp-lbl{font-size:12px;font-weight:600;color:var(--text2);margin:2px 0 7px;display:block}
+  .inp{width:100%;padding:11px 13px;border:1px solid var(--hairline);border-radius:12px;background:var(--card2);
+    color:var(--text);font-size:14px;font-family:inherit;margin-bottom:14px;transition:.2s var(--ease)}
+  .inp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-weak)}
+  .modal-actions{display:flex;gap:10px;margin-top:6px}
+  .modal-actions .btn{flex:1;justify-content:center}
+  .remove{margin-left:10px;width:30px;height:30px;border-radius:9px;border:1px solid var(--hairline);background:transparent;
+    color:var(--text3);cursor:pointer;display:grid;place-items:center;flex:none;transition:.2s var(--ease)}
+  .remove svg{width:15px;height:15px}
+  .remove:hover{color:var(--red);border-color:rgba(255,59,48,.5);background:rgba(255,59,48,.08)}
+
+  /* model picker (OpenRouter) */
+  .or-panel{display:none;margin-top:4px}
+  .or-panel.show{display:block;animation:rise .35s var(--ease)}
+  .model-row{display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--hairline2);border-radius:12px;margin-bottom:8px;cursor:pointer;transition:.2s var(--ease)}
+  .model-row:hover{border-color:var(--hairline);background:var(--hairline2)}
+  .model-row.sel{border-color:var(--accent);background:var(--accent-weak)}
+  .model-row .radio{width:18px;height:18px;border-radius:50%;border:2px solid var(--text3);flex:none;position:relative;transition:.2s var(--ease)}
+  .model-row.sel .radio{border-color:var(--accent)}
+  .model-row.sel .radio::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--accent)}
+  .model-row .mn{font-size:13px;font-weight:560}.model-row .mm{font-size:11px;color:var(--text3);font-weight:500}
+  .free-tag{font-size:10px;font-weight:700;color:var(--green);background:rgba(52,199,89,.15);padding:2px 7px;border-radius:6px;margin-left:auto;flex:none}
+  .paid-tag{font-size:10px;font-weight:700;color:var(--text2);background:var(--hairline2);padding:2px 7px;border-radius:6px;margin-left:auto;flex:none}
+
+  /* hamburger + mobile drawer */
+  .hamb{display:none;width:38px;height:38px;border-radius:10px;border:1px solid var(--hairline);background:var(--card);
+    color:var(--text);cursor:pointer;place-items:center;flex:none}
+  .hamb svg{width:20px;height:20px}
+  .nav-backdrop{display:none}
+
+  @media(max-width:980px) and (min-width:721px){
+    .app{grid-template-columns:74px 1fr}
+    .brand b,.brand small,.nav span,.navlbl,.side-foot .who{display:none}
+    .nav{justify-content:center;padding:11px}
+    .g4{grid-template-columns:repeat(2,1fr)} .g2,.g3{grid-template-columns:1fr}
+    .content{padding:8px 18px 50px}.topbar{padding:18px 18px 12px}
+  }
+  @media(max-width:720px){
+    .app{grid-template-columns:1fr}
+    .sidebar{position:fixed;top:0;left:0;bottom:0;width:250px;z-index:90;transform:translateX(-100%);
+      box-shadow:0 0 60px rgba(0,0,0,.25)}
+    .app.nav-open .sidebar{transform:none}
+    .nav-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:80;display:none;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+    .app.nav-open .nav-backdrop{display:block;animation:fade .3s var(--ease)}
+    .hamb{display:grid}
+    .topbar{padding:14px 16px 10px;gap:11px}.topbar h1{font-size:20px}.topbar .sub{font-size:12px}
+    .content{padding:6px 15px 60px}
+    .grid{gap:11px}
+    .g4,.g3{grid-template-columns:repeat(2,1fr)!important}
+    .g2{grid-template-columns:1fr!important}
+    .card{overflow-x:auto;padding:15px}
+    /* compact stat cards on phones */
+    .stat{padding:13px 14px}
+    .stat .ico{width:30px;height:30px;border-radius:9px;margin-bottom:9px}
+    .stat .ico svg{width:16px;height:16px}
+    .stat .val{font-size:18px}
+    .stat .lbl{font-size:11.5px}
+    .stat .meta{font-size:10.5px;margin-top:3px}
+    .cap{font-size:12.5px;margin-bottom:13px}
+    .statuspill{padding:6px 11px;font-size:12px}
+    .btn.primary{padding:9px 12px}
+    .brand{padding:6px 10px 16px}
+    /* trim inline grid margins */
+    [style*="margin-bottom:18px"]{margin-bottom:11px!important}
+  }
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.dot::after{display:none}}
+</style>
+
+<!-- icon defs -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8a4 4 0 0 1 4-4h1M20 16a4 4 0 0 1-4 4h-1"/><circle cx="8.5" cy="8.5" r="2.4"/><circle cx="15.5" cy="15.5" r="2.4"/><path d="M10.5 10.5l3 3"/></symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></symbol>
+  <symbol id="i-team" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3 3 0 0 1 0 5.8M17 14.2a5.4 5.4 0 0 1 3.5 5.1"/></symbol>
+  <symbol id="i-hist" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7M3 4v4h4"/><path d="M12 8v4l3 2"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4M20 20H4"/><path d="M8 16l3.5-4 3 2.5L20 8"/></symbol>
+  <symbol id="i-report" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13a0 0 0 0 1 0 0H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M13 3v5h5M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-room" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-4 3v-3H4z"/><path d="M8 9h8M8 12h5"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="3"/><path d="M3.5 9h17M8 3v3M16 3v3"/></symbol>
+  <symbol id="i-logs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14M5 10h9M5 15h14M5 19h6"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l16-8-6 16-3-6-7-2z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6 .7-4.4 4 1.2 6-5.4-3-5.4 3 1.2-6-4.4-4 6-.7z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></symbol>
+  <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19z"/><path d="M12 9v5M12 17.5v.01"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2 6M20 5v6h-6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M4 17l5-4 4 3 3-2 4 3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+</svg>
+
+<div class="app" id="app">
+  <div class="nav-backdrop" id="navBackdrop"></div>
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo"><svg><use href="#i-logo"/></svg></div>
+      <div><b>PairFlow</b><small>Automation Control</small></div>
+    </div>
+
+    <div class="navlbl">Overview</div>
+    <div class="nav active" data-v="dash"><svg><use href="#i-dash"/></svg><span>Dashboard</span></div>
+    <div class="nav" data-v="team"><svg><use href="#i-team"/></svg><span>Team &amp; Roles</span></div>
+    <div class="nav" data-v="hist"><svg><use href="#i-hist"/></svg><span>Pairing History</span></div>
+
+    <div class="navlbl">Insights</div>
+    <div class="nav" data-v="perf"><svg><use href="#i-chart"/></svg><span>Performance</span></div>
+    <div class="nav" data-v="reports"><svg><use href="#i-report"/></svg><span>Reports</span></div>
+
+    <div class="navlbl">System</div>
+    <div class="nav" data-v="room"><svg><use href="#i-room"/></svg><span>Element Room</span></div>
+    <div class="nav" data-v="sched"><svg><use href="#i-cal"/></svg><span>Schedule &amp; Rules</span></div>
+    <div class="nav" data-v="jobs"><svg><use href="#i-logs"/></svg><span>Jobs &amp; Logs</span><span class="badge">1</span></div>
+    <div class="nav" data-v="settings"><svg><use href="#i-gear"/></svg><span>Settings</span></div>
+
+    <div class="side-foot">
+      <div class="avatar" style="background:var(--grad-a)">MO</div>
+      <div class="who">Mohsin<small>Admin</small></div>
+      <button class="theme-btn" id="theme" title="Toggle appearance"><svg><use href="#i-moon"/></svg></button>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main class="main">
+    <div class="topbar">
+      <button class="hamb" id="hamb" title="Menu"><svg><use href="#i-menu"/></svg></button>
+      <div>
+        <h1 id="pt">Dashboard</h1>
+        <div class="sub" id="ps">Wednesday, 15 July · 6 members active</div>
+      </div>
+      <div class="statuspill"><span class="dot"></span>Bot Running</div>
+      <button class="btn primary" id="sendNow"><svg><use href="#i-send"/></svg>Send now</button>
+    </div>
+
+    <div class="content">
+
+      <!-- ===== DASHBOARD ===== -->
+      <section class="view active" id="dash">
+        <div class="grid g4" style="margin-bottom:18px">
+          <div class="card stat hover reveal">
+            <div class="ico" style="background:var(--grad-c)"><svg><use href="#i-bolt"/></svg></div>
+            <div class="lbl">Bot state</div><div class="val">Running</div>
+            <div class="meta"><span class="cdot s-ok"></span>Healthy · uptime 12d</div>
+          </div>
+          <div class="card stat hover reveal">
+            <div class="ico" style="background:var(--grad-a)"><svg><use href="#i-shield"/></svg></div>
+            <div class="lbl">Element</div><div class="val">Connected</div>
+            <div class="meta"><svg style="width:13px;height:13px;color:var(--green)"><use href="#i-lock"/></svg>E2EE verified</div>
+          </div>
+          <div class="card stat hover reveal">
+            <div class="ico" style="background:var(--grad-b)"><svg><use href="#i-check"/></svg></div>
+            <div class="lbl">Last message</div><div class="val">11:00 AM</div>
+            <div class="meta">Sent today · delivered</div>
+          </div>
+          <div class="card stat hover reveal">
+            <div class="ico" style="background:linear-gradient(135deg,#5E5CE6,#0A84FF)"><svg><use href="#i-clock"/></svg></div>
+            <div class="lbl">Next message</div><div class="val">in 21h 04m</div>
+            <div class="meta">Tomorrow · 11:00 AM PKT</div>
+          </div>
+        </div>
+
+        <div class="grid g2" style="margin-bottom:18px">
+          <div class="card hover reveal">
+            <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-team"/></svg>Today’s round
+              <span class="tag">Combo C1</span></div>
+            <div class="pair"><div class="who"><span class="mini-av" style="background:var(--grad-a)">U</span>Uzair<span class="plus">+</span><span class="mini-av" style="background:var(--grad-c)">S</span>Saad</div><span class="rt">Developers</span></div>
+            <div class="pair"><div class="who"><span class="mini-av" style="background:var(--grad-b)">F</span>Faz<span class="plus">+</span><span class="mini-av" style="background:linear-gradient(135deg,#5E5CE6,#0A84FF)">H</span>Hamza</div><span class="rt">Developers</span></div>
+            <div class="pair"><div class="who"><span class="mini-av" style="background:var(--grad-d)">Hb</span>Habiba<span class="plus">+</span><span class="mini-av" style="background:linear-gradient(135deg,#FF9F0A,#FF375F)">Aq</span>Aqeel</div><span class="rt">QA · fixed</span></div>
+            <div class="lead-line"><svg><use href="#i-star"/></svg>Saad will make sure all above today · <b style="margin-left:2px">Team Lead</b></div>
+          </div>
+
+          <!-- signature: iMessage preview -->
+          <div class="phone reveal">
+            <div class="room-head">
+              <div class="mini-av" style="background:var(--grad-a);width:34px;height:34px"><svg style="width:17px;height:17px;color:#fff"><use href="#i-room"/></svg></div>
+              <div><div class="rname">#daily-standup</div><div class="rmeta">🔒 Encrypted · report-only</div></div>
+            </div>
+            <div class="bubbles" id="bubbles">
+              <div class="bubble" style="animation-delay:.1s">Pairs Today
+
+Uzair + Saad
+Faz + Hamza
+Habiba + Aqeel
+
+Saad will make sure all above today</div>
+              <div class="stamp">Delivered · 11:00 AM</div>
+              <div class="sender">Uzair</div>
+              <div class="bubble them" style="animation-delay:.25s">Review completed. No issues, concerns, or improvement recommendations identified. ✅</div>
+              <div class="sender">Faz</div>
+              <div class="bubble them" style="animation-delay:.35s">Reviewed Hamza’s PR — 2 small issues logged in the thread. 📝</div>
+              <div class="typing" id="typing"><span></span><span></span><span></span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid g2" style="margin-bottom:18px">
+          <div class="card reveal">
+            <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-check"/></svg>Today’s reports</div>
+            <div class="chips">
+              <div class="chip"><span class="mini-av" style="background:var(--grad-a)">U</span>Uzair<span class="cdot s-ok"></span></div>
+              <div class="chip"><span class="mini-av" style="background:var(--grad-c)">S</span>Saad<span class="cdot s-ok"></span></div>
+              <div class="chip"><span class="mini-av" style="background:var(--grad-b)">F</span>Faz<span class="cdot s-late"></span></div>
+              <div class="chip"><span class="mini-av" style="background:linear-gradient(135deg,#5E5CE6,#0A84FF)">H</span>Hamza<span class="cdot s-wait"></span></div>
+              <div class="chip"><span class="mini-av" style="background:var(--grad-d)">Hb</span>Habiba<span class="cdot s-ok"></span></div>
+              <div class="chip"><span class="mini-av" style="background:linear-gradient(135deg,#FF9F0A,#FF375F)">Aq</span>Aqeel<span class="cdot s-und"></span></div>
+            </div>
+            <div style="display:flex;gap:16px;margin-top:16px;font-size:11.5px;color:var(--text3);font-weight:500;flex-wrap:wrap">
+              <span><span class="cdot s-ok" style="display:inline-block;margin-right:5px"></span>On-time</span>
+              <span><span class="cdot s-late" style="display:inline-block;margin-right:5px"></span>Late</span>
+              <span><span class="cdot s-wait" style="display:inline-block;margin-right:5px"></span>Awaiting</span>
+              <span><span class="cdot s-und" style="display:inline-block;margin-right:5px"></span>Undetermined</span>
+            </div>
+          </div>
+
+          <div class="grid" style="grid-template-columns:1fr 1fr">
+            <div class="card stat hover reveal">
+              <div class="lbl">Completion rate</div>
+              <div class="val" data-count="94">0%</div>
+              <div class="bar" style="margin-top:10px"><i style="width:94%"></i></div>
+              <div class="meta">This week · Mon–Fri</div>
+            </div>
+            <div class="card stat hover reveal">
+              <div class="lbl">On-time rate</div>
+              <div class="val" data-count="88">0%</div>
+              <div class="bar" style="margin-top:10px"><i style="width:88%"></i></div>
+              <div class="meta">↑ 6% vs last week</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card reveal" style="display:flex;align-items:center;gap:12px">
+          <div class="ico" style="width:34px;height:34px;border-radius:10px;background:rgba(52,199,89,.15);display:grid;place-items:center">
+            <svg style="width:18px;height:18px;color:var(--green)"><use href="#i-check"/></svg></div>
+          <div><div style="font-weight:600;font-size:14px">All systems clear</div>
+          <div style="color:var(--text3);font-size:12.5px;font-weight:500">No failed jobs, no decryption errors, no config gaps.</div></div>
+        </div>
+      </section>
+
+      <!-- ===== TEAM ===== -->
+      <section class="view" id="team">
+        <div class="grid g2">
+          <div class="card reveal" id="devCard">
+            <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-team"/></svg>Developers
+              <button class="btn ghost" id="addDev" data-role="Developer" style="margin-left:auto;padding:6px 11px;font-size:12.5px"><svg style="width:14px;height:14px"><use href="#i-plus"/></svg>Add member</button></div>
+            <div class="row"><span class="avatar" style="background:var(--grad-a)">U</span><div><div class="name">Uzair</div><div class="desc">@uzair:matrix.org</div></div><span class="roletag rt-dev">Developer</span><div class="switch on" style="margin-left:auto"></div></div>
+            <div class="row"><span class="avatar" style="background:var(--grad-c)">S</span><div><div class="name">Saad</div><div class="desc">@saad:matrix.org</div></div><span class="roletag rt-lead">Lead today</span><div class="switch on" style="margin-left:auto"></div></div>
+            <div class="row"><span class="avatar" style="background:var(--grad-b)">F</span><div><div class="name">Faz</div><div class="desc">@faz:matrix.org</div></div><span class="roletag rt-dev">Developer</span><div class="switch on" style="margin-left:auto"></div></div>
+            <div class="row"><span class="avatar" style="background:linear-gradient(135deg,#5E5CE6,#0A84FF)">H</span><div><div class="name">Hamza</div><div class="desc">@hamza:matrix.org</div></div><span class="roletag rt-dev">Developer</span><div class="switch on" style="margin-left:auto"></div></div>
+          </div>
+          <div class="grid" style="grid-template-columns:1fr">
+            <div class="card reveal" id="qaCard">
+              <div class="cap"><svg style="width:16px;height:16px;color:var(--purple)"><use href="#i-lock"/></svg>QA — fixed pair
+                <button class="btn ghost" id="addQa" data-role="QA" style="margin-left:auto;padding:6px 11px;font-size:12.5px"><svg style="width:14px;height:14px"><use href="#i-plus"/></svg>Add QA</button></div>
+              <div class="row"><span class="avatar" style="background:var(--grad-d)">Hb</span><div><div class="name">Habiba</div><div class="desc">@habiba:matrix.org</div></div><span class="roletag rt-qa">QA</span></div>
+              <div class="row"><span class="avatar" style="background:linear-gradient(135deg,#FF9F0A,#FF375F)">Aq</span><div><div class="name">Aqeel</div><div class="desc">@aqeel:matrix.org</div></div><span class="roletag rt-qa">QA</span></div>
+              <div class="banner" style="margin-top:14px"><svg><use href="#i-lock"/></svg>Habiba &amp; Aqeel stay paired every day. Changing this needs confirmation.</div>
+            </div>
+            <div class="card reveal">
+              <div class="cap"><svg style="width:16px;height:16px;color:var(--orange)"><use href="#i-star"/></svg>Team Lead order<span class="tag gray">Round-robin · 6</span></div>
+              <div style="font-size:13px;color:var(--text2);font-weight:500;line-height:1.9">
+                Next 5 leads: <b style="color:var(--text)">Faz → Hamza → Habiba → Aqeel → Uzair</b></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== PAIRING HISTORY ===== -->
+      <section class="view" id="hist">
+        <div class="card reveal">
+          <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-hist"/></svg>Recent rounds</div>
+          <table>
+            <tr><th>Date</th><th>Combo</th><th>Developer pairs</th><th>Team Lead</th><th>Message</th></tr>
+            <tr><td>Wed 15 Jul</td><td><span class="combo-badge">C1</span></td><td>Uzair·Saad / Faz·Hamza</td><td>Saad</td><td><span class="status-badge sb-ok"><svg style="width:12px;height:12px"><use href="#i-check"/></svg>Sent</span></td></tr>
+            <tr><td>Tue 14 Jul</td><td><span class="combo-badge">C3</span></td><td>Uzair·Hamza / Saad·Faz</td><td>Uzair</td><td><span class="status-badge sb-ok"><svg style="width:12px;height:12px"><use href="#i-check"/></svg>Sent</span></td></tr>
+            <tr><td>Mon 13 Jul</td><td><span class="combo-badge">C2</span></td><td>Uzair·Faz / Saad·Hamza</td><td>Aqeel</td><td><span class="status-badge sb-ok"><svg style="width:12px;height:12px"><use href="#i-check"/></svg>Sent</span></td></tr>
+            <tr><td>Fri 10 Jul</td><td><span class="combo-badge">C1</span></td><td>Uzair·Saad / Faz·Hamza</td><td>Habiba</td><td><span class="status-badge sb-fail"><svg style="width:12px;height:12px"><use href="#i-warn"/></svg>Retried</span></td></tr>
+            <tr><td>Thu 09 Jul</td><td><span class="combo-badge">C3</span></td><td>Uzair·Hamza / Saad·Faz</td><td>Hamza</td><td><span class="status-badge sb-ok"><svg style="width:12px;height:12px"><use href="#i-check"/></svg>Sent</span></td></tr>
+          </table>
+        </div>
+      </section>
+
+      <!-- ===== PERFORMANCE ===== -->
+      <section class="view" id="perf">
+        <div class="grid g3" style="margin-bottom:18px">
+          <div class="card stat hover reveal"><div class="lbl">Team completion</div><div class="val" data-count="94">0%</div><div class="bar" style="margin-top:10px"><i style="width:94%"></i></div></div>
+          <div class="card stat hover reveal"><div class="lbl">On-time</div><div class="val" data-count="88">0%</div><div class="bar" style="margin-top:10px"><i style="width:88%"></i></div></div>
+          <div class="card stat hover reveal"><div class="lbl">Clean reviews</div><div class="val" data-count="71">0%</div><div class="bar" style="margin-top:10px"><i style="width:71%;background:var(--grad-b)"></i></div></div>
+        </div>
+        <div class="card reveal">
+          <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-chart"/></svg>Per-member · this week
+            <span class="tag">report-only room</span></div>
+          <table class="metric-tbl">
+            <tr><th>Member</th><th>Completion</th><th>On-time</th><th>Clean</th><th>Streak</th><th>As Lead</th></tr>
+            <tr><td>Uzair</td><td><div class="bar"><i style="width:100%"></i></div></td><td>100%</td><td>80%</td><td>🔥 5</td><td><span class="pct hi">96%</span></td></tr>
+            <tr><td>Saad</td><td><div class="bar"><i style="width:100%"></i></div></td><td>90%</td><td>70%</td><td>🔥 5</td><td><span class="pct hi">92%</span></td></tr>
+            <tr><td>Faz</td><td><div class="bar"><i style="width:80%"></i></div></td><td>75%</td><td>60%</td><td>2</td><td><span class="pct mid">78%</span></td></tr>
+            <tr><td>Hamza</td><td><div class="bar"><i style="width:90%"></i></div></td><td>85%</td><td>75%</td><td>3</td><td><span class="pct hi">90%</span></td></tr>
+          </table>
+          <div class="img-note"><svg><use href="#i-star"/></svg><b style="color:var(--text);font-weight:600">As Lead</b>&nbsp;= how the whole team did on the days this member was Team Lead — they’re accountable for it (no manual confirm).</div>
+        </div>
+      </section>
+
+      <!-- ===== REPORTS ===== -->
+      <section class="view" id="reports">
+        <div class="grid g2">
+          <div class="card reveal">
+            <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-report"/></svg>Weekly report · Jul 7–11
+              <span class="tag green">Posted as image</span></div>
+
+            <!-- this is the exact document the bot renders, screenshots, and posts to the room -->
+            <div class="report-doc">
+              <div class="rd-head">
+                <b>Weekly Performance · #daily-standup</b><br><small>Jul 7 – Jul 11 · 5 working days</small>
+              </div>
+              <div class="rd-body">
+                <table>
+                  <tr><th>Member</th><th>Role</th><th>Done</th><th>On-time</th><th>Clean</th><th>Streak</th></tr>
+                  <tr><td>Uzair</td><td>Dev</td><td class="pct hi">100%</td><td class="pct hi">100%</td><td class="pct mid">80%</td><td>🔥 5</td></tr>
+                  <tr><td>Saad</td><td>Dev</td><td class="pct hi">100%</td><td class="pct hi">90%</td><td class="pct mid">70%</td><td>🔥 5</td></tr>
+                  <tr><td>Faz</td><td>Dev</td><td class="pct mid">80%</td><td class="pct mid">75%</td><td class="pct lo">60%</td><td>2</td></tr>
+                  <tr><td>Hamza</td><td>Dev</td><td class="pct hi">90%</td><td class="pct hi">85%</td><td class="pct mid">75%</td><td>3</td></tr>
+                  <tr><td>Habiba</td><td>QA</td><td class="pct hi">100%</td><td class="pct hi">95%</td><td class="pct hi">90%</td><td>🔥 8</td></tr>
+                  <tr><td>Aqeel</td><td>QA</td><td class="pct hi">95%</td><td class="pct hi">90%</td><td class="pct hi">85%</td><td>4</td></tr>
+                </table>
+              </div>
+              <div class="rd-foot">Team completion 94% · on-time 88% · clean 77% — generated by PairFlow</div>
+            </div>
+
+            <div class="img-note"><svg><use href="#i-img"/></svg>The bot renders this table, captures it as a PNG, and posts the image to the room — clean everywhere, no markdown quirks.</div>
+
+            <div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;letter-spacing:.04em;margin:20px 0 8px">AI summary (posted as text below the image)</div>
+            <p style="font-size:14px;line-height:1.65;color:var(--text2);font-weight:450">
+              Strong week — completion held at 94%. Uzair, Saad and Habiba kept perfect completion with long on-time streaks. Faz slipped on two late reports midweek; worth a light nudge. Review quality is trending up, with clean reviews rising from 58% to 77%.</p>
+          </div>
+
+          <div class="grid" style="grid-template-columns:1fr">
+            <div class="card reveal">
+              <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-report"/></svg>Monthly report · June
+                <span class="tag gray">Template fallback</span></div>
+              <div class="banner" style="margin-bottom:14px"><svg><use href="#i-warn"/></svg>AI summary unavailable — deterministic template used. The numbers below are always exact.</div>
+              <div class="report-doc">
+                <div class="rd-head"><b>Monthly Performance · June</b><br><small>21 working days</small></div>
+                <div class="rd-body">
+                  <table>
+                    <tr><th>Member</th><th>Done</th><th>On-time</th><th>Clean</th></tr>
+                    <tr><td>Uzair</td><td class="pct hi">98%</td><td class="pct hi">93%</td><td class="pct mid">78%</td></tr>
+                    <tr><td>Saad</td><td class="pct hi">95%</td><td class="pct hi">88%</td><td class="pct mid">72%</td></tr>
+                    <tr><td>Faz</td><td class="pct mid">82%</td><td class="pct mid">74%</td><td class="pct lo">64%</td></tr>
+                    <tr><td>Hamza</td><td class="pct hi">90%</td><td class="pct hi">86%</td><td class="pct mid">76%</td></tr>
+                  </table>
+                </div>
+                <div class="rd-foot">Team completion 91% · on-time 85% — generated by PairFlow</div>
+              </div>
+            </div>
+            <div class="card reveal" style="display:flex;align-items:center;gap:12px">
+              <div class="ico" style="width:34px;height:34px;border-radius:10px;background:var(--accent-weak);display:grid;place-items:center">
+                <svg style="width:18px;height:18px;color:var(--accent)"><use href="#i-refresh"/></svg></div>
+              <div style="flex:1"><div style="font-weight:600;font-size:14px">Re-generate &amp; re-post</div>
+                <div style="color:var(--text3);font-size:12.5px;font-weight:500">Rebuild any report and post the fresh image to the room.</div></div>
+              <button class="btn ghost" style="padding:8px 13px">Run</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== ELEMENT ROOM ===== -->
+      <section class="view" id="room">
+        <div class="grid g2">
+          <div class="card reveal">
+            <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-room"/></svg>Connection<span class="tag green">Healthy</span></div>
+            <div class="field"><div><div class="fl">Homeserver</div><div class="fd">Matrix server the bot signs in to</div></div><span class="masked">matrix.org</span></div>
+            <div class="field"><div><div class="fl">Room</div><div class="fd">The one room the bot may touch</div></div><span class="masked">!a9x…:matrix.org</span></div>
+            <div class="field"><div><div class="fl">Encryption</div><div class="fd">End-to-end · device verified</div></div><span class="status-badge sb-ok"><svg style="width:12px;height:12px"><use href="#i-lock"/></svg>E2EE OK</span></div>
+            <div class="field"><div><div class="fl">Bot membership</div><div class="fd">Joined · can read replies</div></div><span class="status-badge sb-ok"><svg style="width:12px;height:12px"><use href="#i-check"/></svg>Joined</span></div>
+            <button class="btn ghost" style="margin-top:16px"><svg><use href="#i-send"/></svg>Send test message</button>
+          </div>
+          <div class="phone reveal">
+            <div class="room-head">
+              <div class="mini-av" style="background:var(--grad-a);width:34px;height:34px"><svg style="width:17px;height:17px;color:#fff"><use href="#i-room"/></svg></div>
+              <div><div class="rname">#daily-standup</div><div class="rmeta">🔒 Encrypted · report-only</div></div>
+            </div>
+            <div class="bubbles">
+              <div class="bubble" style="animation-delay:.1s">📊 Weekly report — Jul 7–11</div>
+              <div class="bubble imgcard" style="animation-delay:.2s">
+                <div class="cap-img"><svg><use href="#i-img"/></svg>weekly-report.png</div>
+                <div class="report-doc">
+                  <div class="rd-head"><b>Weekly Performance</b><br><small>Jul 7 – Jul 11</small></div>
+                  <div class="rd-body"><table>
+                    <tr><th>Member</th><th>Done</th><th>On-time</th><th>Clean</th></tr>
+                    <tr><td>Uzair</td><td class="pct hi">100%</td><td class="pct hi">100%</td><td class="pct mid">80%</td></tr>
+                    <tr><td>Saad</td><td class="pct hi">100%</td><td class="pct hi">90%</td><td class="pct mid">70%</td></tr>
+                    <tr><td>Faz</td><td class="pct mid">80%</td><td class="pct mid">75%</td><td class="pct lo">60%</td></tr>
+                    <tr><td>Hamza</td><td class="pct hi">90%</td><td class="pct hi">85%</td><td class="pct mid">75%</td></tr>
+                  </table></div>
+                </div>
+              </div>
+              <div class="bubble" style="animation-delay:.3s">Strong week — completion 94%, on-time 88%. Faz had 2 late reports; clean reviews up to 77%. 👍</div>
+              <div class="stamp">Delivered · Fri 5:00 PM</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SCHEDULE ===== -->
+      <section class="view" id="sched">
+        <div class="card reveal" style="margin-bottom:18px">
+          <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-cal"/></svg>Daily schedule</div>
+          <div class="field"><div><div class="fl">Send time</div><div class="fd">Asia/Karachi (PKT)</div></div><span class="masked">11:00 AM</span></div>
+          <div class="field"><div><div class="fl">Working days</div></div>
+            <div style="display:flex;gap:7px">
+              <span class="day on">M</span><span class="day on">T</span><span class="day on">W</span><span class="day on">T</span><span class="day on">F</span><span class="day off">S</span><span class="day off">S</span>
+            </div></div>
+          <div class="field"><div><div class="fl">On-time cutoff</div><div class="fd">Reports after this count as late <span class="od"><svg style="width:10px;height:10px"><use href="#i-warn"/></svg>OPEN DECISION</span></div></div><span class="masked">23:59 same day</span></div>
+        </div>
+        <div class="card reveal">
+          <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-gear"/></svg>Rules</div>
+          <div class="field"><div><div class="fl">Report attribution</div><div class="fd">How a message counts as someone’s report <span class="od"><svg style="width:10px;height:10px"><use href="#i-warn"/></svg>OPEN DECISION</span></div></div>
+            <div class="pillbtns"><button class="pillbtn on">Thread reply</button><button class="pillbtn">Keyword</button></div></div>
+          <div class="field"><div><div class="fl">Team Lead verification</div><div class="fd">System decides from reports · the day’s lead is accountable for the team</div></div>
+            <div class="pillbtns"><button class="pillbtn on">Implicit</button></div></div>
+          <div class="field"><div><div class="fl">Weekly report</div><div class="fd">Friday after cutoff</div></div><div class="switch on"></div></div>
+          <div class="field"><div><div class="fl">Monthly report</div><div class="fd">Last working day</div></div><div class="switch on"></div></div>
+        </div>
+      </section>
+
+      <!-- ===== JOBS ===== -->
+      <section class="view" id="jobs">
+        <div class="card reveal">
+          <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-logs"/></svg>Jobs<span class="tag" style="color:var(--red);background:rgba(255,59,48,.12)">1 failed</span></div>
+          <table>
+            <tr><th>Job</th><th>Scheduled</th><th>Status</th><th></th></tr>
+            <tr><td>Daily message</td><td>Today 11:00</td><td><span class="status-badge sb-ok"><svg style="width:12px;height:12px"><use href="#i-check"/></svg>Done · 1 try</span></td><td></td></tr>
+            <tr><td>Report ingest</td><td>Continuous</td><td><span class="status-badge sb-run">Running</span></td><td></td></tr>
+            <tr><td>Weekly report</td><td>Fri 17:00</td><td><span class="status-badge sb-run">Queued</span></td><td></td></tr>
+            <tr><td>Report ingest</td><td>Aqeel · 10:40</td><td><span class="status-badge sb-fail"><svg style="width:12px;height:12px"><use href="#i-warn"/></svg>Undetermined</span></td><td><button class="btn ghost" style="padding:6px 11px"><svg><use href="#i-refresh"/></svg>Re-run</button></td></tr>
+          </table>
+          <div class="banner" style="margin-top:16px"><svg><use href="#i-warn"/></svg>One reply couldn’t be decrypted (E2EE). Marked <b>undetermined</b>, not missed — Aqeel isn’t penalised.</div>
+        </div>
+      </section>
+
+      <!-- ===== SETTINGS ===== -->
+      <section class="view" id="settings">
+        <div class="grid g2">
+          <div class="card reveal">
+            <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-gear"/></svg>LLM narratives</div>
+            <div class="field"><div><div class="fl">Provider</div><div class="fd">Used only for report summaries</div></div>
+              <div class="pillbtns" id="provGroup"><button class="pillbtn on" data-prov="anthropic">Anthropic</button><button class="pillbtn" data-prov="openai">OpenAI</button><button class="pillbtn" data-prov="gemini">Gemini</button><button class="pillbtn" data-prov="openrouter">OpenRouter</button></div></div>
+
+            <!-- standard providers: single key -->
+            <div class="field" id="keyField"><div style="flex:1"><div class="fl">API key</div><div class="fd">Encrypted at rest · never shown in plain text</div></div>
+              <input class="inp" id="apiKeyInp" placeholder="Paste key…" style="max-width:190px;margin:0" value="sk-••••••••4f2a"></div>
+
+            <!-- OpenRouter: fetch + filter + pick a model -->
+            <div class="or-panel" id="orPanel">
+              <div class="field"><div style="flex:1"><div class="fl">OpenRouter key</div><div class="fd">Paste, then fetch this key’s models</div></div>
+                <div style="display:flex;gap:8px;align-items:center;margin:0">
+                  <input class="inp" id="orKey" placeholder="sk-or-…" style="max-width:150px;margin:0">
+                  <button class="btn primary" id="fetchModels" style="padding:9px 13px">Fetch</button></div></div>
+              <div class="field"><div><div class="fl">Free models only</div><div class="fd">Filter out paid models</div></div><div class="switch" id="freeToggle"></div></div>
+              <div style="padding:6px 4px 2px"><div class="inp-lbl">Available models <span id="modelCount" style="color:var(--text3)"></span></div>
+                <div id="modelList" style="max-height:230px;overflow-y:auto"><div style="color:var(--text3);font-size:12.5px;font-weight:500;padding:10px 2px">Paste your key and tap Fetch to load models.</div></div>
+                <div id="selectedModel" style="font-size:12.5px;font-weight:560;color:var(--accent);padding:8px 2px;display:none"></div>
+              </div>
+            </div>
+            <div class="field"><div><div class="fl">Enable AI summaries</div><div class="fd">Off = deterministic templates only</div></div><div class="switch on"></div></div>
+            <div class="field"><div><div class="fl">Pseudonymise names to LLM</div><div class="fd">Send “Developer A” instead of real names <span class="od"><svg style="width:10px;height:10px"><use href="#i-warn"/></svg>OPEN DECISION</span></div></div><div class="switch"></div></div>
+          </div>
+          <div class="card reveal">
+            <div class="cap"><svg style="width:16px;height:16px;color:var(--accent)"><use href="#i-shield"/></svg>Account &amp; appearance</div>
+            <div class="field"><div><div class="fl">Admin</div><div class="fd">mohsin</div></div><button class="btn ghost" style="padding:7px 12px">Change password</button></div>
+            <div class="field"><div><div class="fl">Appearance</div><div class="fd">Light / Dark</div></div><button class="btn ghost" id="theme2" style="padding:7px 12px">Toggle</button></div>
+            <div class="field"><div><div class="fl">Backups</div><div class="fd">Postgres + E2EE store · daily</div></div><span class="status-badge sb-ok"><svg style="width:12px;height:12px"><use href="#i-check"/></svg>Healthy</span></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<!-- Add member modal -->
+<div class="modal-backdrop" id="memberModal">
+  <div class="modal">
+    <h3 id="mmTitle">Add member</h3>
+    <div class="msub" id="mmSub">They’ll join the rotation from the next working day.</div>
+    <label class="inp-lbl">Name</label>
+    <input class="inp" id="mName" placeholder="e.g. Bilal" autocomplete="off">
+    <label class="inp-lbl">Element username</label>
+    <input class="inp" id="mUser" placeholder="@bilal:matrix.org" autocomplete="off">
+    <label class="inp-lbl">Role</label>
+    <div class="pillbtns" id="mRole" style="margin-bottom:6px"><button class="pillbtn on" data-r="Developer">Developer</button><button class="pillbtn" data-r="QA">QA</button></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="mCancel">Cancel</button>
+      <button class="btn primary" id="mAdd"><svg><use href="#i-plus"/></svg>Add member</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const titles={dash:['Dashboard','Wednesday, 15 July · 6 members active'],team:['Team & Roles','4 developers · 1 fixed QA pair'],
+    hist:['Pairing History','Deterministic 3-combo rotation'],perf:['Performance','Signal from members’ room reports'],
+    reports:['Reports','Numbers computed · narrative by AI'],room:['Element Room','One encrypted room · least privilege'],
+    sched:['Schedule & Rules','All times in Asia/Karachi'],jobs:['Jobs & Logs','Retries, failures, audit trail'],
+    settings:['Settings','Secrets encrypted at rest']};
+  const navs=document.querySelectorAll('.nav'), views=document.querySelectorAll('.view');
+  const pt=document.getElementById('pt'), ps=document.getElementById('ps');
+  navs.forEach(n=>n.addEventListener('click',()=>{
+    const v=n.dataset.v;
+    navs.forEach(x=>x.classList.remove('active')); n.classList.add('active');
+    views.forEach(x=>x.classList.remove('active'));
+    const el=document.getElementById(v); void el.offsetWidth; el.classList.add('active');
+    pt.textContent=titles[v][0]; ps.textContent=titles[v][1];
+    document.querySelector('.main').scrollTo({top:0,behavior:'smooth'});
+    countUp(el);
+  }));
+
+  // theme
+  const root=document.documentElement, tbtn=document.getElementById('theme');
+  function toggleTheme(){
+    const dark=root.getAttribute('data-theme')==='dark';
+    root.setAttribute('data-theme',dark?'light':'dark');
+    tbtn.querySelector('use').setAttribute('href',dark?'#i-moon':'#i-sun');
+  }
+  tbtn.addEventListener('click',toggleTheme);
+  document.getElementById('theme2').addEventListener('click',toggleTheme);
+
+  // count-up
+  function countUp(scope){
+    scope.querySelectorAll('[data-count]').forEach(el=>{
+      const t=+el.dataset.count; let c=0; const step=Math.max(1,Math.round(t/28));
+      el.textContent='0%';
+      const iv=setInterval(()=>{c+=step; if(c>=t){c=t;clearInterval(iv);} el.textContent=c+'%';},22);
+    });
+  }
+  countUp(document.getElementById('dash'));
+
+  // send-now → typing then new bubble
+  document.getElementById('sendNow').addEventListener('click',()=>{
+    const b=document.getElementById('bubbles'), t=document.getElementById('typing');
+    if(!b) return;
+    t.style.display='flex';
+    setTimeout(()=>{
+      t.style.display='none';
+      const nb=document.createElement('div'); nb.className='bubble them';
+      nb.textContent='Found 1 minor issue in the login flow — logged it in the thread. 📝';
+      b.insertBefore(nb,t);
+      const st=document.createElement('div'); st.className='stamp'; st.textContent='Just now'; b.insertBefore(st,t);
+      b.scrollTop=b.scrollHeight;
+    },1400);
+  });
+
+  // switches
+  document.querySelectorAll('.switch').forEach(s=>s.addEventListener('click',()=>s.classList.toggle('on')));
+  // pill groups (single-select)
+  document.querySelectorAll('.pillbtns').forEach(g=>g.querySelectorAll('.pillbtn').forEach(b=>
+    b.addEventListener('click',()=>{g.querySelectorAll('.pillbtn').forEach(x=>x.classList.remove('on'));b.classList.add('on');})));
+
+  // ---------- mobile drawer ----------
+  const app=document.getElementById('app');
+  document.getElementById('hamb').addEventListener('click',()=>app.classList.add('nav-open'));
+  document.getElementById('navBackdrop').addEventListener('click',()=>app.classList.remove('nav-open'));
+  navs.forEach(n=>n.addEventListener('click',()=>app.classList.remove('nav-open')));
+
+  // ---------- Team: remove buttons ----------
+  const gradients=['var(--grad-a)','var(--grad-c)','var(--grad-b)','linear-gradient(135deg,#5E5CE6,#0A84FF)','var(--grad-d)','linear-gradient(135deg,#FF9F0A,#FF375F)','linear-gradient(135deg,#30D0B0,#0A84FF)'];
+  function addRemoveBtn(row){
+    if(row.querySelector('.remove'))return;
+    const b=document.createElement('button'); b.className='remove'; b.title='Remove';
+    b.innerHTML='<svg><use href="#i-x"/></svg>';
+    b.onclick=()=>{ if(confirm('Remove this member? Past history stays; they’re excluded from future rounds.')){
+      row.style.transition='.3s var(--ease)'; row.style.opacity='0'; row.style.transform='translateX(20px)';
+      setTimeout(()=>row.remove(),260);} };
+    row.appendChild(b);
+  }
+  document.querySelectorAll('#devCard .row, #qaCard .row').forEach(addRemoveBtn);
+
+  // ---------- Team: add modal ----------
+  const modal=document.getElementById('memberModal');
+  let addTarget='Developer';
+  function openModal(role){
+    addTarget=role;
+    document.getElementById('mmTitle').textContent = role==='QA' ? 'Add QA member' : 'Add member';
+    document.getElementById('mName').value=''; document.getElementById('mUser').value='';
+    document.querySelectorAll('#mRole .pillbtn').forEach(p=>p.classList.toggle('on',p.dataset.r===role));
+    modal.classList.add('show'); setTimeout(()=>document.getElementById('mName').focus(),100);
+  }
+  document.getElementById('addDev').onclick=()=>openModal('Developer');
+  document.getElementById('addQa').onclick=()=>openModal('QA');
+  document.getElementById('mCancel').onclick=()=>modal.classList.remove('show');
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.classList.remove('show')});
+  document.querySelectorAll('#mRole .pillbtn').forEach(p=>p.onclick=()=>addTarget=p.dataset.r);
+
+  document.getElementById('mAdd').onclick=()=>{
+    const name=document.getElementById('mName').value.trim();
+    let user=document.getElementById('mUser').value.trim();
+    if(!name){document.getElementById('mName').focus();return;}
+    if(user && !user.startsWith('@')) user='@'+user;
+    const isQA=addTarget==='QA';
+    const card=document.getElementById(isQA?'qaCard':'devCard');
+    const initials=name.slice(0,isQA?2:1);
+    const grad=gradients[Math.floor(Math.random()*gradients.length)];
+    const row=document.createElement('div'); row.className='row'; row.style.opacity='0';
+    row.innerHTML='<span class="avatar" style="background:'+grad+'">'+initials+'</span>'+
+      '<div><div class="name">'+name+'</div><div class="desc">'+(user||'—')+'</div></div>'+
+      '<span class="roletag '+(isQA?'rt-qa':'rt-dev')+'">'+(isQA?'QA':'Developer')+'</span>'+
+      (isQA?'':'<div class="switch on" style="margin-left:auto"></div>');
+    card.appendChild(row); addRemoveBtn(row);
+    row.querySelectorAll('.switch').forEach(s=>s.addEventListener('click',()=>s.classList.toggle('on')));
+    requestAnimationFrame(()=>{row.style.transition='.4s var(--ease)';row.style.opacity='1';});
+    modal.classList.remove('show');
+  };
+
+  // ---------- OpenRouter: provider switch + model fetch/filter/select ----------
+  const orPanel=document.getElementById('orPanel'), keyField=document.getElementById('keyField');
+  document.querySelectorAll('#provGroup .pillbtn').forEach(b=>b.addEventListener('click',()=>{
+    const or=b.dataset.prov==='openrouter';
+    orPanel.classList.toggle('show',or);
+    keyField.style.display=or?'none':'flex';
+  }));
+
+  const OR_MODELS=[
+    {n:'Llama 3.1 8B Instruct',id:'meta-llama/llama-3.1-8b-instruct:free',free:true},
+    {n:'Mistral 7B Instruct',id:'mistralai/mistral-7b-instruct:free',free:true},
+    {n:'Gemma 2 9B',id:'google/gemma-2-9b-it:free',free:true},
+    {n:'Qwen 2.5 7B',id:'qwen/qwen-2.5-7b-instruct:free',free:true},
+    {n:'Phi-3 Mini',id:'microsoft/phi-3-mini:free',free:true},
+    {n:'Claude 3.5 Sonnet',id:'anthropic/claude-3.5-sonnet',free:false},
+    {n:'GPT-4o',id:'openai/gpt-4o',free:false},
+    {n:'Llama 3.1 70B',id:'meta-llama/llama-3.1-70b-instruct',free:false},
+    {n:'Gemini Pro 1.5',id:'google/gemini-pro-1.5',free:false},
+  ];
+  let fetched=false, chosen=null;
+  const listEl=document.getElementById('modelList'), countEl=document.getElementById('modelCount'),
+        freeToggle=document.getElementById('freeToggle'), selEl=document.getElementById('selectedModel');
+  function renderModels(){
+    if(!fetched)return;
+    const onlyFree=freeToggle.classList.contains('on');
+    const rows=OR_MODELS.filter(m=>!onlyFree||m.free);
+    countEl.textContent='· '+rows.length+' shown';
+    listEl.innerHTML=rows.map(m=>
+      '<div class="model-row'+(chosen===m.id?' sel':'')+'" data-id="'+m.id+'"><div class="radio"></div>'+
+      '<div><div class="mn">'+m.n+'</div><div class="mm">'+m.id+'</div></div>'+
+      (m.free?'<span class="free-tag">FREE</span>':'<span class="paid-tag">paid</span>')+'</div>').join('');
+    listEl.querySelectorAll('.model-row').forEach(r=>r.onclick=()=>{
+      chosen=r.dataset.id; renderModels();
+      selEl.style.display='block'; selEl.textContent='✓ Selected: '+chosen;
+    });
+  }
+  document.getElementById('fetchModels').onclick=()=>{
+    const btn=document.getElementById('fetchModels'); btn.textContent='Loading…';
+    setTimeout(()=>{fetched=true; btn.textContent='Fetch'; renderModels();},700);
+  };
+  freeToggle.addEventListener('click',()=>renderModels()); // generic .switch handler already toggled the class
+</script>

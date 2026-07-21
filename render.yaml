@@ -1,0 +1,69 @@
+services:
+  - type: web
+    name: pairflow-api
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_PORT
+        value: "8000"
+      - key: TIMEZONE
+        value: Asia/Karachi
+      - key: MATRIX_E2EE_STORE_PATH
+        value: /app/data/matrix_store
+      - key: DB_HOST
+        fromDatabase:
+          name: pairflow-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: pairflow-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: pairflow-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: pairflow-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: pairflow-db
+          property: password
+      - sync: false
+        key: ADMIN_USERNAME
+      - sync: false
+        key: ADMIN_PASSWORD
+      - sync: false
+        key: SESSION_SECRET
+      - sync: false
+        key: SECRETS_ENCRYPTION_KEY
+      - sync: false
+        key: MATRIX_HOMESERVER_URL
+      - sync: false
+        key: MATRIX_BOT_USERNAME
+      - sync: false
+        key: MATRIX_BOT_PASSWORD
+      - sync: false
+        key: MATRIX_ROOM_ID
+      - sync: false
+        key: MATRIX_TASK_ROOM_ID
+      - sync: false
+        key: MATRIX_DEVICE_ID
+      - sync: false
+        key: MATRIX_RECOVERY_KEY
+      - sync: false
+        key: MATRIX_PICKLE_KEY
+      - sync: false
+        key: FRONTEND_URL
+
+databases:
+  - name: pairflow-db
+    plan: free
+    region: singapore
