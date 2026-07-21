@@ -13,8 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Playwright Chromium for report PNG screenshots
-RUN playwright install --with-deps chromium
+# Playwright for report PNGs (optional on tiny VMs — set SKIP_PLAYWRIGHT=1 to omit)
+ARG SKIP_PLAYWRIGHT=0
+RUN if [ "$SKIP_PLAYWRIGHT" = "0" ]; then playwright install --with-deps chromium; fi
 
 COPY app ./app
 
