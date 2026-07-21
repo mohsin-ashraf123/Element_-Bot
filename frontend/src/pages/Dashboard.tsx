@@ -225,7 +225,7 @@ export function Dashboard() {
 
       <div className="grid g2" style={{ marginBottom: 18 }}>
         <RoomPhonePreview
-          roomName={status?.task_room_name ?? "Task room"}
+          roomName={status?.task_room_name ?? "Scrum / Tasks"}
           roomLabel={status?.task_room_label ?? undefined}
           homeserver={status?.homeserver}
           roomSubtitle={taskMonthSubtitle}

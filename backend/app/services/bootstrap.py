@@ -41,3 +41,11 @@ def init_db() -> None:
                     )
                 )
             db.commit()
+
+    from pathlib import Path
+
+    from app.core.config import settings
+    from app.services import room_feed_cache_db
+
+    cache_file = Path(settings.matrix_e2ee_store_path).resolve().parent / "member_feed_cache.json"
+    room_feed_cache_db.seed_from_file_if_empty(cache_file)

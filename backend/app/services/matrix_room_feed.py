@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 30.0
 _STALE_MAX = 900.0
-_MEMBER_CACHE_PATH = Path("./data/member_feed_cache.json")
+_MEMBER_CACHE_PATH = Path(settings.matrix_e2ee_store_path).resolve().parent / "member_feed_cache.json"
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _refreshing: set[str] = set()
 _fetch_lock = threading.Lock()
@@ -211,27 +211,54 @@ def _save_member_cache_file(data: dict[str, dict[str, dict]]) -> None:
 
 
 def _member_cache_for_room(room_id: str, *, day: str) -> list[dict]:
+    from app.services import room_feed_cache_db
+
+    parsed_day = day
     with _member_cache_lock:
         store = _load_member_cache_file()
     room_rows = store.get(room_id, {})
-    return [
+    file_rows = [
         msg
         for msg in room_rows.values()
-        if msg.get("day") == day and not msg.get("is_bot")
+        if msg.get("day") == parsed_day and not msg.get("is_bot")
     ]
+    try:
+        day_date = date.fromisoformat(parsed_day)
+        db_rows = room_feed_cache_db.load_for_day(room_id, day=parsed_day, include_bot=False)
+    except ValueError:
+        db_rows = []
+    return _merge_cached_rows(file_rows, db_rows)
 
 
 def _member_cache_for_range(room_id: str, *, since: date, until: date) -> list[dict]:
+    from app.services import room_feed_cache_db
+
+    since_s, until_s = since.isoformat(), until.isoformat()
     with _member_cache_lock:
         store = _load_member_cache_file()
     room_rows = store.get(room_id, {})
-    since_s, until_s = since.isoformat(), until.isoformat()
-    return [
+    file_rows = [
         msg
         for msg in room_rows.values()
         if not msg.get("is_bot")
         and since_s <= (msg.get("day") or "") <= until_s
     ]
+    db_rows = room_feed_cache_db.load_for_range(
+        room_id, since=since, until=until, include_bot=False
+    )
+    return _merge_cached_rows(file_rows, db_rows)
+
+
+def _merge_cached_rows(*groups: list[dict]) -> list[dict]:
+    by_id: dict[str, dict] = {}
+    for group in groups:
+        for msg in group:
+            key = str(msg.get("event_id") or msg.get("id") or "")
+            if key:
+                by_id[key] = msg
+    merged = list(by_id.values())
+    merged.sort(key=lambda m: m.get("sent_at") or "")
+    return merged
 
 
 def _persist_member_messages(
@@ -258,6 +285,12 @@ def _persist_member_messages(
             room_rows[str(event_id)] = {**msg, "day": day}
         store[room_id] = room_rows
         _save_member_cache_file(store)
+    try:
+        from app.services import room_feed_cache_db
+
+        room_feed_cache_db.upsert_messages(members, room_id=room_id)
+    except Exception:
+        logger.debug("DB room cache persist skipped", exc_info=True)
 
 
 def merge_member_cache(
@@ -847,7 +880,13 @@ def fetch_messages(
             range_start=start if span_days > 1 else None,
             range_end=end if span_days > 1 else None,
         )
-        return []
+        return merge_member_cache(
+            room_id,
+            [],
+            zone_name=zone_name,
+            since=start if span_days > 1 else None,
+            until=end if span_days > 1 else None,
+        )
 
     try:
         return _blocking_fetch(

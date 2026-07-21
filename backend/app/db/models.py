@@ -188,3 +188,17 @@ class AuditLog(Base):
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class CachedRoomMessage(Base):
+    """Decrypted Matrix room messages — survives redeploys (Railway has no local JSON cache)."""
+
+    __tablename__ = "cached_room_messages"
+    __table_args__ = (UniqueConstraint("room_id", "event_id", name="uq_cached_room_event"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    room_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    event_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    day: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    is_bot: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
