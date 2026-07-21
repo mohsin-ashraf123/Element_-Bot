@@ -58,15 +58,28 @@ def test_single_dev_is_solo():
     assert combos[0].pairs[0].pair_type is PairType.SOLO
 
 
-def test_five_devs_yield_triple_plus_pair():
+def test_five_devs_yield_pairs_plus_solo():
+    """Odd N → circle method: two-person pairs + one rotating SOLO (never a triple)."""
     combos = build_combos(DEVS_FIVE)
-    assert len(combos) == 10
+    # With bye padding, n=6 → rounds = 5
+    assert len(combos) == 5
     for combo in combos:
-        triples = [p for p in combo.pairs if p.member_c is not None]
-        pairs = [p for p in combo.pairs if p.member_c is None and p.pair_type is PairType.DEV]
-        assert len(triples) == 1
-        assert len(pairs) == 1
-        assert len(triples[0].members()) == 3
-        assert len(pairs[0].members()) == 2
-        covered = triples[0].members() | pairs[0].members()
+        assert all(p.member_c is None for p in combo.pairs)
+        solos = [p for p in combo.pairs if p.pair_type is PairType.SOLO]
+        pairs = [p for p in combo.pairs if p.pair_type is PairType.DEV]
+        assert len(solos) == 1
+        assert len(pairs) == 2
+        covered = frozenset().union(*(p.members() for p in combo.pairs))
         assert covered == frozenset(DEVS_FIVE)
+
+
+def test_six_devs_are_all_two_person_pairs():
+    """Even N (incl. Mohsin) → only two-person DEV pairs, no SOLO/triple."""
+    mohsin = 6
+    combos = build_combos([*DEVS_FIVE, mohsin])
+    assert len(combos) == 5
+    for combo in combos:
+        assert all(p.member_c is None for p in combo.pairs)
+        assert all(p.pair_type is PairType.DEV for p in combo.pairs)
+        assert all(p.member_b is not None for p in combo.pairs)
+        assert len(combo.pairs) == 3

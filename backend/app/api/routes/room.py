@@ -34,7 +34,7 @@ def room_trust() -> dict:
 
 @router.get("/status")
 def room_status(db: Session = Depends(get_db)) -> dict:
-    """Fast room connection status — no blocking Matrix or analysis."""
+    """Fast room connection status — cached health + mirrored messages only."""
     health = element_health.check()
     schedule = settings_service.get_setting(db, "schedule")
     zone = schedule.get("timezone", settings.timezone)
@@ -43,15 +43,6 @@ def room_status(db: Session = Depends(get_db)) -> dict:
 
     pairing_id = settings.matrix_room_id
     refreshing = pairing_id in matrix_room_feed.refreshing_rooms()
-    if not refreshing and matrix_room_feed.cache_age(pairing_id) is None:
-        mxid = {
-            m.matrix_user_id: m.name
-            for m in team_service.list_members(db)
-            if m.matrix_user_id
-        }
-        refreshing = matrix_room_feed.schedule_refresh(
-            room_id=pairing_id, zone_name=zone, mxid_to_name=mxid
-        ) or refreshing
 
     return {
         "configured": health["configured"],

@@ -6,7 +6,7 @@ import asyncio
 import logging
 import threading
 import time
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta
 
 from nio import MatrixRoom
 from nio.events.room_events import RoomMessageText
@@ -91,68 +91,101 @@ def _zone_name() -> str:
         return settings.timezone
 
 
-async def _backfill_today(
+async def _backfill_range(
     client,
     room_id: str,
     *,
     zone_name: str,
+    days: int = 40,
+    max_pages: int = 15,
 ) -> None:
-    """One-shot key recovery for today's undecrypted member messages."""
+    """Mirror the recent room timeline (bot + member) into the DB.
+
+    Paginates backwards until messages fall before the window, recovering
+    Megolm keys for encrypted events so the full history is decrypted once and
+    persisted — the dashboard then just reads it from the DB.
+    """
     from nio.events.room_events import RoomMessageText
 
     zone = tz(zone_name)
     today = datetime.now(zone).date()
-    day_start = datetime.combine(today, dt_time.min, tzinfo=zone)
-    day_end = datetime.combine(today, dt_time.max, tzinfo=zone)
+    window_start = datetime.combine(
+        today - timedelta(days=days), dt_time.min, tzinfo=zone
+    )
+    window_end = datetime.combine(today, dt_time.max, tzinfo=zone)
     bot_user = settings.matrix_bot_username
     names = _refresh_mxid_names()
     pending: list[MegolmEvent] = []
     seen: set[str] = set()
+    page_from: str | None = None
 
-    resp = await client.room_messages(room_id, limit=40, direction="b")
-    for event in resp.chunk or []:
-        if isinstance(event, RoomMessageText):
-            row = _message_from_text_event(
-                event,
-                zone=zone,
-                day_start=day_start,
-                day_end=day_end,
-                bot_user=bot_user,
-                mxid_to_name=names,
-                seen=seen,
-            )
-            if row and not row.get("is_bot"):
-                _persist_member_messages(room_id, [row], day=today.isoformat())
-            continue
-        if isinstance(event, MegolmEvent):
-            origin_ms = int(getattr(event, "server_timestamp", 0) or 0)
-            if not origin_ms and hasattr(event, "source"):
-                origin_ms = int(event.source.get("origin_server_ts", 0) or 0)
-            if not origin_ms:
+    for _ in range(max_pages):
+        resp = await client.room_messages(
+            room_id, start=page_from, limit=80, direction="b"
+        )
+        if not getattr(resp, "chunk", None):
+            break
+        reached_before_window = False
+        for event in resp.chunk:
+            if isinstance(event, RoomMessageText):
+                row = _message_from_text_event(
+                    event,
+                    zone=zone,
+                    day_start=window_start,
+                    day_end=window_end,
+                    bot_user=bot_user,
+                    mxid_to_name=names,
+                    seen=seen,
+                )
+                if row:
+                    _persist_member_messages(
+                        room_id,
+                        [row],
+                        zone_name=zone_name,
+                        fallback_day=today.isoformat(),
+                    )
                 continue
-            sent_at = datetime.fromtimestamp(origin_ms / 1000, tz=zone)
-            if day_start <= sent_at <= day_end:
-                pending.append(event)
+            if isinstance(event, MegolmEvent):
+                origin_ms = int(getattr(event, "server_timestamp", 0) or 0)
+                if not origin_ms and hasattr(event, "source"):
+                    origin_ms = int(event.source.get("origin_server_ts", 0) or 0)
+                if not origin_ms:
+                    continue
+                sent_at = datetime.fromtimestamp(origin_ms / 1000, tz=zone)
+                if sent_at < window_start:
+                    reached_before_window = True
+                    continue
+                if sent_at <= window_end:
+                    pending.append(event)
+        page_from = resp.end
+        if reached_before_window or not page_from:
+            break
 
     if not pending:
+        invalidate_cache(room_id)
         return
 
-    recovered = await recover_megolm_events(client, room_id, pending, max_rounds=3)
+    recovered = await recover_megolm_events(client, room_id, pending, max_rounds=4)
     for event in recovered:
         if isinstance(event, RoomMessageText):
             row = _message_from_text_event(
                 event,
                 zone=zone,
-                day_start=day_start,
-                day_end=day_end,
+                day_start=window_start,
+                day_end=window_end,
                 bot_user=bot_user,
                 mxid_to_name=names,
                 seen=seen,
             )
-            if row and not row.get("is_bot"):
-                _persist_member_messages(room_id, [row], day=today.isoformat())
-                invalidate_cache(room_id)
-                logger.info("Backfilled member message from %s", row.get("label"))
+            if row:
+                _persist_member_messages(
+                    room_id,
+                    [row],
+                    zone_name=zone_name,
+                    fallback_day=today.isoformat(),
+                )
+                logger.info("Backfilled message from %s", row.get("label"))
+    invalidate_cache(room_id)
 
 
 def _target_rooms() -> list[str]:
@@ -178,8 +211,9 @@ async def _listen_async() -> None:
     async def _on_room_message(room: MatrixRoom, event: RoomMessageText) -> None:
         if room.room_id not in room_ids:
             return
+        # Persist every decrypted message (Element-style mirror) — no today-only cut.
         today = datetime.now(zone).date()
-        day_start = datetime.combine(today, dt_time.min, tzinfo=zone)
+        day_start = datetime.combine(today - timedelta(days=40), dt_time.min, tzinfo=zone)
         day_end = datetime.combine(today, dt_time.max, tzinfo=zone)
         names = _refresh_mxid_names()
         row = _message_from_text_event(
@@ -191,18 +225,35 @@ async def _listen_async() -> None:
             mxid_to_name=names,
             seen=seen,
         )
-        if not row or row.get("is_bot"):
+        if not row:
             return
-        _persist_member_messages(room.room_id, [row], day=today.isoformat())
+        _persist_member_messages(
+            room.room_id,
+            [row],
+            zone_name=zone_name,
+            fallback_day=today.isoformat(),
+        )
         invalidate_cache(room.room_id)
         logger.info(
-            "Listener captured member message in %s from %s",
+            "Listener captured message in %s from %s",
             room.room_id,
             row.get("label"),
         )
         from app.services import analysis_service
 
         analysis_service.invalidate_cache()
+        try:
+            from app.db.session import SessionLocal
+            from app.services import dashboard_service
+            from app.services.feed_hub import notify_feed_update
+
+            db = SessionLocal()
+            try:
+                notify_feed_update(dashboard_service.build_feed(db, force=False))
+            finally:
+                db.close()
+        except Exception:
+            logger.debug("Listener feed notify skipped", exc_info=True)
 
     client.add_event_callback(_on_room_message, RoomMessageText)
     room_filter = _sync_filter_for_rooms(room_ids)
@@ -216,7 +267,8 @@ async def _listen_async() -> None:
                     warm=_is_store_warm(store_path),
                     skip_keys=False,
                 )
-            await _backfill_today(client, room_ids[0], zone_name=zone_name)
+            for room_id in room_ids:
+                await _backfill_range(client, room_id, zone_name=zone_name)
 
         logger.info("Matrix room listener started for %s", room_ids)
         while not _stop.is_set():

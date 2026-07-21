@@ -111,7 +111,18 @@ def complete_json_with_error(
             logger.warning("LLM error %s: %s", resp.status_code, detail)
             return None, f"OpenRouter returned {resp.status_code} — check key and model"
 
-        content = resp.json()["choices"][0]["message"]["content"]
+        body = resp.json()
+        choices = body.get("choices")
+        if not choices:
+            # OpenRouter sometimes returns HTTP 200 with an error payload
+            # (rate limit, no credits, bad model). Surface that instead of
+            # crashing on a missing "choices" key.
+            err = body.get("error") or {}
+            msg = err.get("message") if isinstance(err, dict) else str(err)
+            logger.warning("LLM returned no choices: %s", json.dumps(body)[:300])
+            return None, msg or "OpenRouter returned no completion — check credits/model"
+
+        content = choices[0]["message"]["content"]
         parsed = _parse_json_block(content)
         if parsed is None:
             return None, "AI response was not valid JSON — try again or pick another model"

@@ -206,11 +206,11 @@ export const getMe = () =>
 export const getStatus = () =>
   api.get<BotStatus>("/dashboard/status", { timeout: 30_000 }).then((r) => r.data);
 
-export const getFeed = (force = true) =>
+export const getFeed = (force = false) =>
   api
     .get<DashboardFeed>("/dashboard/feed", {
       params: force ? { force: true } : undefined,
-      timeout: 120_000,
+      timeout: 30_000,
     })
     .then((r) => r.data);
 export const getToday = () =>
@@ -229,7 +229,7 @@ export const getLeadPreview = () =>
 export const getHistory = () => api.get("/rounds/history").then((r) => r.data);
 export const getSettings = () => api.get("/settings").then((r) => r.data);
 export const getRoomStatus = () =>
-  api.get<RoomStatus>("/room/status", { timeout: 15_000 }).then((r) => r.data);
+  api.get<RoomStatus>("/room/status", { timeout: 10_000 }).then((r) => r.data);
 
 export type SendResult = {
   ok: boolean;

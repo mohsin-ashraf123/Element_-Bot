@@ -249,13 +249,31 @@ def _member_cache_for_range(room_id: str, *, since: date, until: date) -> list[d
     return _merge_cached_rows(file_rows, db_rows)
 
 
+def _is_encrypted_stub(msg: dict) -> bool:
+    return bool(msg.get("encrypted")) or (msg.get("text") or "").startswith(
+        "[Encrypted — waiting for room keys]"
+    )
+
+
 def _merge_cached_rows(*groups: list[dict]) -> list[dict]:
+    """Merge by event id — never let an encrypted stub replace real body text."""
     by_id: dict[str, dict] = {}
     for group in groups:
         for msg in group:
             key = str(msg.get("event_id") or msg.get("id") or "")
-            if key:
+            if not key:
+                continue
+            existing = by_id.get(key)
+            if existing is None:
                 by_id[key] = msg
+                continue
+            # Prefer decrypted / seeded content over placeholders.
+            if _is_encrypted_stub(msg) and not _is_encrypted_stub(existing):
+                continue
+            if _is_encrypted_stub(existing) and not _is_encrypted_stub(msg):
+                by_id[key] = msg
+                continue
+            by_id[key] = msg
     merged = list(by_id.values())
     merged.sort(key=lambda m: m.get("sent_at") or "")
     return merged
@@ -264,33 +282,142 @@ def _merge_cached_rows(*groups: list[dict]) -> list[dict]:
 def _persist_member_messages(
     room_id: str, messages: list[dict], *, zone_name: str, fallback_day: str
 ) -> None:
-    members = [m for m in messages if not m.get("is_bot")]
-    if not members:
+    """Mirror the room timeline to durable storage.
+
+    Every decrypted message (bot + member) is upserted into Postgres keyed by
+    Matrix event id so the dashboard can read the full room from the DB and
+    just filter by time. The JSON file cache keeps member messages only as a
+    local fallback for older data.
+    """
+    if not messages:
         return
     zone = tz(zone_name)
-    with _member_cache_lock:
-        store = _load_member_cache_file()
-        room_rows = dict(store.get(room_id, {}))
-        for msg in members:
-            event_id = msg.get("event_id") or msg.get("id")
-            if not event_id:
-                continue
-            day = fallback_day
-            sent = msg.get("sent_at")
-            if sent:
-                try:
-                    day = datetime.fromisoformat(sent).astimezone(zone).date().isoformat()
-                except ValueError:
-                    pass
-            room_rows[str(event_id)] = {**msg, "day": day}
-        store[room_id] = room_rows
-        _save_member_cache_file(store)
+
+    def _day_for(msg: dict) -> str:
+        sent = msg.get("sent_at")
+        if sent:
+            try:
+                return datetime.fromisoformat(sent).astimezone(zone).date().isoformat()
+            except ValueError:
+                pass
+        return fallback_day
+
+    # Never persist encrypted stubs — they would overwrite real seeded/decrypted text.
+    durable = [m for m in messages if not _is_encrypted_stub(m)]
+    if not durable:
+        return
+
+    stamped = [{**m, "day": _day_for(m)} for m in durable]
+
+    members = [m for m in stamped if not m.get("is_bot")]
+    if members:
+        with _member_cache_lock:
+            store = _load_member_cache_file()
+            room_rows = dict(store.get(room_id, {}))
+            for msg in members:
+                event_id = msg.get("event_id") or msg.get("id")
+                if not event_id:
+                    continue
+                key = str(event_id)
+                prev = room_rows.get(key)
+                if prev and not _is_encrypted_stub(prev) and _is_encrypted_stub(msg):
+                    continue
+                room_rows[key] = msg
+            store[room_id] = room_rows
+            _save_member_cache_file(store)
+
     try:
         from app.services import room_feed_cache_db
 
-        room_feed_cache_db.upsert_messages(members, room_id=room_id)
+        room_feed_cache_db.upsert_messages(stamped, room_id=room_id)
     except Exception:
         logger.debug("DB room cache persist skipped", exc_info=True)
+
+
+def cached_room_timeline(
+    room_id: str,
+    *,
+    since: date,
+    until: date,
+    zone_name: str,
+) -> list[dict]:
+    """Full stored timeline (bot + member) for a date range.
+
+    Reads from Postgres first (survives redeploys) and merges the local JSON
+    member cache for older data. This is what the dashboard reads so the feed
+    is instant and identical on local + live — no blocking Matrix fetch.
+    """
+    if not room_id:
+        return []
+    from app.services import room_feed_cache_db
+
+    db_rows: list[dict] = []
+    try:
+        db_rows = room_feed_cache_db.load_for_range(
+            room_id, since=since, until=until, include_bot=True
+        )
+    except Exception:
+        logger.debug("DB room timeline read failed for %s", room_id, exc_info=True)
+    file_rows = _member_cache_for_range(room_id, since=since, until=until)
+    merged = _merge_cached_rows(file_rows, db_rows)
+    return _dedupe_bot_repeats(merged)
+
+
+def recent_room_timeline(
+    room_id: str,
+    *,
+    zone_name: str,
+    limit: int = 40,
+) -> list[dict]:
+    """Element-style room mirror — latest messages, no day filter."""
+    if not room_id:
+        return []
+    from app.services import room_feed_cache_db
+
+    db_rows: list[dict] = []
+    try:
+        db_rows = room_feed_cache_db.load_recent(room_id, limit=limit, include_bot=True)
+    except Exception:
+        logger.debug("DB recent timeline read failed for %s", room_id, exc_info=True)
+
+    # Merge the whole JSON file cache for this room (no day cut).
+    with _member_cache_lock:
+        store = _load_member_cache_file()
+    room_rows = store.get(room_id, {})
+    file_rows = [msg for msg in room_rows.values() if isinstance(msg, dict)]
+    merged = _merge_cached_rows(file_rows, db_rows)
+    if len(merged) > limit:
+        merged = merged[-limit:]
+    return _dedupe_bot_repeats(merged)
+
+
+def filter_messages_for_day(
+    messages: list[dict],
+    *,
+    day: date,
+    zone_name: str,
+) -> list[dict]:
+    """Keep only messages that belong to ``day`` in the given timezone."""
+    zone = tz(zone_name)
+    day_s = day.isoformat()
+    out: list[dict] = []
+    for msg in messages:
+        raw_day = msg.get("day")
+        if raw_day and str(raw_day)[:10] == day_s:
+            out.append(msg)
+            continue
+        sent = msg.get("sent_at")
+        if not sent:
+            continue
+        try:
+            when = datetime.fromisoformat(str(sent))
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=zone)
+            if when.astimezone(zone).date() == day:
+                out.append(msg)
+        except ValueError:
+            continue
+    return out
 
 
 def merge_member_cache(
@@ -479,11 +606,19 @@ async def _fetch_messages_async(
             resp = await client.room_messages(
                 room_id, start=page_from, limit=page_limit, direction="b"
             )
-            if not resp.chunk:
+            chunk = getattr(resp, "chunk", None)
+            if chunk is None:
+                logger.warning(
+                    "room_messages failed for %s: %s",
+                    room_id,
+                    getattr(resp, "message", resp),
+                )
+                break
+            if not chunk:
                 break
 
             reached_before_range = False
-            for event in resp.chunk:
+            for event in chunk:
                 if isinstance(event, RoomMessageText):
                     row = _message_from_text_event(
                         event,
@@ -522,6 +657,9 @@ async def _fetch_messages_async(
             recovered = await recover_megolm_events(
                 client, room_id, pending_megolm, max_rounds=5 if span_days > 1 else 3
             )
+            recovered_ids = {
+                getattr(ev, "event_id", None) for ev in recovered if getattr(ev, "event_id", None)
+            }
             for event in recovered:
                 if isinstance(event, RoomMessageText):
                     row = _message_from_text_event(
@@ -535,10 +673,56 @@ async def _fetch_messages_async(
                     )
                     if row:
                         out.append(row)
-            if not recovered:
+            # Keep timeline aligned with Element: show a stub for still-encrypted
+            # member messages so the room mirror isn't silently missing rows.
+            still = [e for e in pending_megolm if getattr(e, "event_id", None) not in recovered_ids]
+            for event in still:
+                event_id = getattr(event, "event_id", None) or ""
+                if not event_id or event_id in seen:
+                    continue
+                origin_ms = _event_origin_ms(event)
+                if not origin_ms:
+                    continue
+                sent_at = datetime.fromtimestamp(origin_ms / 1000, tz=zone)
+                if sent_at < day_start or sent_at > day_end:
+                    continue
+                sender = getattr(event, "sender", "") or ""
+                if sender == bot_user:
+                    continue
+                # If we already have seeded/decrypted body for this event, skip stub.
+                cached_hit = merge_member_cache(
+                    room_id,
+                    [],
+                    zone_name=zone_name,
+                    since=range_start if span_days > 1 else None,
+                    until=range_end if span_days > 1 else None,
+                )
+                if any(
+                    str(m.get("event_id") or m.get("id")) == event_id
+                    and not _is_encrypted_stub(m)
+                    and (m.get("text") or "").strip()
+                    for m in cached_hit
+                ):
+                    seen.add(event_id)
+                    continue
+                seen.add(event_id)
+                out.append(
+                    {
+                        "id": event_id,
+                        "kind": "room_message",
+                        "label": _display_name(sender, mxid_to_name),
+                        "sender": sender,
+                        "text": "[Encrypted — waiting for room keys]",
+                        "sent_at": sent_at.isoformat(),
+                        "is_bot": False,
+                        "event_id": event_id,
+                        "encrypted": True,
+                    }
+                )
+            if still:
                 logger.info(
                     "Room feed: %d encrypted member event(s) still pending in %s",
-                    len(pending_megolm),
+                    len(still),
                     room_id,
                 )
 
@@ -690,9 +874,11 @@ def _background_refresh(
             from app.services import dashboard_service
             from app.services.feed_hub import notify_feed_update
 
+            # Do not pass force=True — that would re-schedule Matrix refresh
+            # while we are still finishing this one (and re-run LLM).
             db = SessionLocal()
             try:
-                notify_feed_update(dashboard_service.build_feed(db), force=True)
+                notify_feed_update(dashboard_service.build_feed(db, force=False))
             finally:
                 db.close()
         except Exception:

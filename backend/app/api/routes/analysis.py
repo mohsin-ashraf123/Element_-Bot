@@ -19,16 +19,28 @@ router = APIRouter(prefix="/analysis", tags=["analysis"])
 @router.get("/today")
 def today(db: Session = Depends(get_db)) -> dict:
     try:
+        from datetime import datetime
+
+        from app.domain.calendar import tz
+        from app.services import matrix_room_feed
+
         schedule = settings_service.get_setting(db, "schedule")
         zone_name = schedule.get("timezone", settings.timezone)
         pairing = dashboard_service.today_room_messages(
             db, zone_name, room_id=settings.matrix_room_id
         )
         task = dashboard_service.today_task_messages(db, zone_name)
+        day = datetime.now(tz(zone_name)).date()
+        pairing = matrix_room_feed.filter_messages_for_day(
+            pairing, day=day, zone_name=zone_name
+        )
+        task_today = matrix_room_feed.filter_messages_for_day(
+            task, day=day, zone_name=zone_name
+        )
         return analysis_service.analyze_today(
             db,
             pairing_messages=pairing,
-            task_messages=task,
+            task_messages=task_today or task,
             zone_name=zone_name,
             force=True,
         )
@@ -40,16 +52,28 @@ def today(db: Session = Depends(get_db)) -> dict:
 @router.post("/run")
 def run_analysis(db: Session = Depends(get_db)) -> dict:
     """Force a fresh analysis pass (re-fetch + optional LLM)."""
+    from datetime import datetime
+
+    from app.domain.calendar import tz
+    from app.services import matrix_room_feed
+
     schedule = settings_service.get_setting(db, "schedule")
     zone_name = schedule.get("timezone", settings.timezone)
     pairing = dashboard_service.today_room_messages(
         db, zone_name, room_id=settings.matrix_room_id
     )
     task = dashboard_service.today_task_messages(db, zone_name)
+    day = datetime.now(tz(zone_name)).date()
+    pairing = matrix_room_feed.filter_messages_for_day(
+        pairing, day=day, zone_name=zone_name
+    )
+    task_today = matrix_room_feed.filter_messages_for_day(
+        task, day=day, zone_name=zone_name
+    )
     return analysis_service.analyze_today(
         db,
         pairing_messages=pairing,
-        task_messages=task,
+        task_messages=task_today or task,
         zone_name=zone_name,
         force=True,
     )

@@ -71,9 +71,11 @@ export function Dashboard() {
     };
 
     loadFast();
-    loadFeed(true);
-    const fastId = window.setInterval(loadFast, 20_000);
-    const feedId = window.setInterval(() => loadFeed(true), 45_000);
+    // Cache-first paint; background Matrix sync is scheduled by the API without
+    // force=true so we don't kick off a login storm on every dashboard open.
+    loadFeed(false);
+    const fastId = window.setInterval(loadFast, 30_000);
+    const feedId = window.setInterval(() => loadFeed(false), 45_000);
     return () => {
       window.clearInterval(fastId);
       window.clearInterval(feedId);
@@ -86,12 +88,7 @@ export function Dashboard() {
   const today_messages = feed?.today_messages ?? [];
   const task_messages = feed?.task_messages ?? [];
   const analysis = feed?.analysis;
-  const taskMonthSubtitle =
-    feed?.task_month_start && feed?.task_month_end
-      ? `This month · ${feed.task_month_start} – ${feed.task_month_end}`
-      : feed?.task_week_start && feed?.task_week_end
-        ? `This month · ${feed.task_week_start} – ${feed.task_week_end}`
-        : "This month";
+  const taskMonthSubtitle = "Live room · recent messages";
   const pairsSentToday = today_messages.some((m) => m.kind === "daily_message");
   const attendanceByName = Object.fromEntries(
     (analysis?.attendance ?? []).map((a) => [a.name, a])
@@ -217,8 +214,8 @@ export function Dashboard() {
           showPreview={!!round?.rendered_text && !pairsSentToday}
           emptyText={
             feedLoading
-              ? "Loading today's messages from Element…"
-              : "Daily message preview will appear here once today's round is ready."
+              ? "Loading room messages from Element…"
+              : "Room messages will appear here once the Element mirror syncs."
           }
         />
       </div>
@@ -233,10 +230,10 @@ export function Dashboard() {
           taskFormat
           emptyText={
             feedLoading
-              ? "Loading this month's task messages…"
+              ? "Loading room messages from Element…"
               : status?.task_room_joined === false
                 ? "Invite the bot to the task room to read developer assignments."
-                : "No task messages this month yet."
+                : "Room messages will appear here once the Element mirror syncs."
           }
         />
 

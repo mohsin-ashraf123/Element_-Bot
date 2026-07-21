@@ -68,7 +68,7 @@ def _sync_filter_for_room(room_id: str) -> dict:
     return {
         "room": {
             "rooms": [room_id],
-            "timeline": {"limit": 5},
+            "timeline": {"limit": 50},
             "state": {"lazy_load_members": False},
             "ephemeral": {"lazy_load_members": True},
         }

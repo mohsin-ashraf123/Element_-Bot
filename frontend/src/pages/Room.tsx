@@ -67,7 +67,7 @@ export function Room() {
 
     loadFeed();
 
-    const statusId = window.setInterval(loadStatus, 20_000);
+    const statusId = window.setInterval(loadStatus, 30_000);
 
     const feedId = window.setInterval(loadFeed, 60_000);
 

@@ -11,9 +11,9 @@ from app.services import matrix_client
 
 logger = logging.getLogger(__name__)
 
-_CACHE_TTL_OK = 120.0
-_CACHE_TTL_ERR = 45.0
-_STALE_OK_MAX = 600.0
+_CACHE_TTL_OK = 180.0
+_CACHE_TTL_ERR = 60.0
+_STALE_OK_MAX = 900.0
 
 _cache: dict | None = None
 _cache_expires: float = 0.0
@@ -78,13 +78,19 @@ def _apply_result(result: dict) -> dict:
         ttl = _CACHE_TTL_OK
     elif (
         result.get("error")
-        and "429" in str(result.get("error"))
+        and (
+            "429" in str(result.get("error"))
+            or "M_UNKNOWN_TOKEN" in str(result.get("error")).upper()
+            or "token is not active" in str(result.get("error")).lower()
+        )
         and _last_ok is not None
         and (now - _last_ok_at) < _STALE_OK_MAX
     ):
+        # Don't flash red "Not in room" / dead-token during login races —
+        # keep the last healthy snapshot while a background refresh settles.
         stale = copy.deepcopy(_last_ok)
         stale["cached"] = True
-        stale["error"] = result["error"]
+        stale["error"] = None
         _cache = stale
         _cache_expires = now + _CACHE_TTL_ERR
         return stale

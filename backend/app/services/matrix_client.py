@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,12 @@ class MatrixSession:
 
 _session: MatrixSession | None = None
 _session_checked_at: float = 0.0
+# Serialize session acquisition so concurrent callers (feed refresh, listener,
+# e2ee warm, startup) don't each password-login at once and trip matrix.org's
+# rate limit (M_LIMIT_EXCEEDED). A fresh in-memory session is reused for TTL
+# seconds with no network round-trip.
+_session_lock = threading.RLock()
+_SESSION_TTL = 600.0
 
 
 def _parse_mxid(mxid: str) -> tuple[str, str]:
@@ -164,25 +171,25 @@ def _persist_session(session: MatrixSession) -> None:
     )
 
 
+def _hydrate_session(client: httpx.Client, sess: MatrixSession) -> MatrixSession | None:
+    r = client.get(
+        f"{_homeserver()}/_matrix/client/v3/account/whoami",
+        headers={"Authorization": f"Bearer {sess.access_token}"},
+    )
+    if r.status_code != 200:
+        return None
+    data = r.json()
+    sess.device_id = data.get("device_id", sess.device_id)
+    sess.user_id = data.get("user_id", sess.user_id)
+    return sess
+
+
 def _validate_token(client: httpx.Client, token: str) -> bool:
     r = client.get(
         f"{_homeserver()}/_matrix/client/v3/account/whoami",
         headers={"Authorization": f"Bearer {token}"},
     )
     return r.status_code == 200
-
-
-def _hydrate_session(client: httpx.Client, sess: MatrixSession) -> MatrixSession | None:
-    if not _validate_token(client, sess.access_token):
-        return None
-    r = client.get(
-        f"{_homeserver()}/_matrix/client/v3/account/whoami",
-        headers={"Authorization": f"Bearer {sess.access_token}"},
-    )
-    if r.status_code == 200:
-        sess.device_id = r.json().get("device_id", sess.device_id)
-        sess.user_id = r.json().get("user_id", sess.user_id)
-    return sess
 
 
 def invalidate_session() -> None:
@@ -220,29 +227,46 @@ def get_session(*, force_login: bool = False) -> MatrixSession:
 
     now = time.monotonic()
 
+    with _session_lock:
+        # Reuse a recently validated session with no network round-trip. This
+        # is the common path and keeps concurrent callers off the login route.
+        if (
+            not force_login
+            and _session is not None
+            and (now - _session_checked_at) < _SESSION_TTL
+        ):
+            return _session
+
+        return _acquire_session(force_login=force_login, now=now)
+
+
+def _acquire_session(*, force_login: bool, now: float) -> MatrixSession:
+    global _session, _session_checked_at
+
     with httpx.Client(timeout=15.0) as client:
-        if not force_login:
-            candidates: list[MatrixSession | None] = [
-                _session,
-                _load_persisted_session(),
-            ]
-            if settings.matrix_access_token.strip():
-                candidates.append(
-                    MatrixSession(
-                        access_token=settings.matrix_access_token.strip(),
-                        device_id=settings.matrix_device_id,
-                        user_id=settings.matrix_bot_username,
-                    )
+        # Even on force_login, prefer a token that still works — password login
+        # invalidates older tokens and triggers Matrix rate limits (M_LIMIT_EXCEEDED).
+        candidates: list[MatrixSession | None] = [
+            _session,
+            _load_persisted_session(),
+        ]
+        if not force_login and settings.matrix_access_token.strip():
+            candidates.append(
+                MatrixSession(
+                    access_token=settings.matrix_access_token.strip(),
+                    device_id=settings.matrix_device_id,
+                    user_id=settings.matrix_bot_username,
                 )
-            for cand in candidates:
-                if not cand:
-                    continue
-                hydrated = _hydrate_session(client, cand)
-                if hydrated:
-                    _session = hydrated
-                    _session_checked_at = now
-                    _persist_session(hydrated)
-                    return hydrated
+            )
+        for cand in candidates:
+            if not cand:
+                continue
+            hydrated = _hydrate_session(client, cand)
+            if hydrated:
+                _session = hydrated
+                _session_checked_at = now
+                _persist_session(hydrated)
+                return hydrated
 
         if not settings.matrix_bot_password.strip():
             raise RuntimeError(
@@ -261,6 +285,14 @@ def get_session(*, force_login: bool = False) -> MatrixSession:
                 "initial_device_display_name": "PairFlow Bot",
             },
         )
+        if login.status_code == 429:
+            # Cool down: reuse whatever we last persisted if Matrix is rate-limiting.
+            persisted = _load_persisted_session()
+            if persisted and _validate_token(client, persisted.access_token):
+                _session = persisted
+                _session_checked_at = now
+                return persisted
+            raise RuntimeError(_parse_matrix_error(login))
         if login.status_code != 200:
             raise RuntimeError(_parse_matrix_error(login))
 
@@ -290,7 +322,8 @@ def ensure_room_joined(room_id: str, session: MatrixSession | None = None) -> bo
     if not room_id:
         return False
     sess = session or get_session()
-    if room_id in joined_rooms(sess):
+    rooms = joined_rooms(sess)
+    if room_id in rooms:
         return True
 
     enc = quote(room_id, safe="")
@@ -310,6 +343,7 @@ def ensure_room_joined(room_id: str, session: MatrixSession | None = None) -> bo
 
 
 def joined_rooms(session: MatrixSession | None = None) -> list[str]:
+    """List joined rooms. Uses the provided session token as-is (no re-login)."""
     sess = session or get_session()
     with httpx.Client(timeout=12.0) as client:
         r = client.get(
@@ -427,7 +461,12 @@ def send_image(
 
 
 def health_check(*, force: bool = False) -> dict:
-    """Connectivity probe for dashboard / room status."""
+    """Connectivity probe for dashboard / room status.
+
+    ``force`` means skip soft caches and talk to Matrix now — it does NOT
+    force a password re-login (that invalidates other in-flight tokens and
+    causes M_UNKNOWN_TOKEN storms).
+    """
     base = {
         "configured": is_configured(),
         "connected": False,
@@ -444,15 +483,7 @@ def health_check(*, force: bool = False) -> dict:
         base["error"] = "Matrix env vars incomplete"
         return base
 
-    try:
-        sess = get_session(force_login=force)
-        base["connected"] = True
-        base["device_id"] = sess.device_id
-    except Exception as exc:
-        base["error"] = str(exc)
-        return base
-
-    try:
+    def _probe(sess: MatrixSession) -> None:
         ensure_joined_room(sess)
         joined = joined_rooms(sess)
         base["joined"] = settings.matrix_room_id in joined
@@ -491,8 +522,27 @@ def health_check(*, force: bool = False) -> dict:
             base["error"] = "Bot logged in but not joined to pairing room — invite the bot"
         elif task_id and not base["task_room_joined"]:
             base["error"] = "Bot not joined to task room — invite the bot to the task room"
+
+    try:
+        sess = get_session()
+        base["connected"] = True
+        base["device_id"] = sess.device_id
+        try:
+            _probe(sess)
+        except Exception as exc:
+            if not _is_auth_error(exc):
+                raise
+            # One soft re-login — never loop.
+            invalidate_session()
+            sess = get_session(force_login=True)
+            base["connected"] = True
+            base["device_id"] = sess.device_id
+            base["error"] = None
+            _probe(sess)
     except Exception as exc:
         base["error"] = str(exc)
+        base["connected"] = False
+        base["joined"] = False
 
     if "room_name" not in base:
         base["room_name"] = None

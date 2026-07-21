@@ -40,14 +40,25 @@ def get_performance(db: Session, *, scope: Scope = "today") -> dict[str, Any]:
     zone_name = schedule.get("timezone", settings.timezone)
 
     if scope == "today":
+        from app.services import matrix_room_feed
+        from app.domain.calendar import tz
+        from datetime import datetime
+
         pairing = dashboard_service.today_room_messages(
             db, zone_name, room_id=settings.matrix_room_id
         )
         task = dashboard_service.today_task_messages(db, zone_name)
+        today = datetime.now(tz(zone_name)).date()
+        pairing = matrix_room_feed.filter_messages_for_day(
+            pairing, day=today, zone_name=zone_name
+        )
+        task_today = matrix_room_feed.filter_messages_for_day(
+            task, day=today, zone_name=zone_name
+        )
         result = analysis_service.analyze_today(
             db,
             pairing_messages=pairing,
-            task_messages=task,
+            task_messages=task_today or task,
             zone_name=zone_name,
             llm=False,
         )

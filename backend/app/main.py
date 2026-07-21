@@ -112,8 +112,10 @@ async def lifespan(app: FastAPI):
     threading.Thread(target=_startup_warm, daemon=True, name="e2ee-warm").start()
     threading.Thread(target=_deferred_trust, daemon=True, name="matrix-trust").start()
     threading.Thread(target=_warm_health, daemon=True, name="matrix-health").start()
-    # Listener disabled — isolated feed fetch avoids E2EE store lock clashes on Windows.
-    # start_listener()
+    # Persistent sync mirrors Element rooms into Postgres (decrypt + backfill).
+    from app.services.matrix_room_listener import start_listener
+
+    start_listener()
     start_scheduler()
 
     hub = get_hub()

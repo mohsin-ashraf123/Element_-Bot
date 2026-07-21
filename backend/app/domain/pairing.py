@@ -5,10 +5,9 @@ pairs for one day) is generated with the classic round-robin *circle method*,
 which yields N-1 combos that together cover every possible pair exactly once.
 
 - N = 4  → 3 combos (C1, C2, C3), matching the PRD exactly.
-- N = 5  → 10 combos: one triple + one pair each day (no solo slot).
-- Even N → N-1 combos, each a perfect matching.
-- Odd N (except 5) → one developer gets a SOLO "self-review" slot each combo
-           (RULES R5.2 default), rotating fairly.
+- Even N → N-1 combos, each a perfect matching (all two-person pairs).
+- Odd N → one developer gets a SOLO "self-review" slot each combo
+           (RULES R5.2 default), rotating fairly. Never a three-person pair.
 
 Rotation across working days is a simple round-robin over the combo list,
 advancing one position per working day (RULES R2.3). State is *derived* from
@@ -18,7 +17,6 @@ the last used combo index (read from history), never a mutable counter.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from itertools import combinations
 
 from .constants import PairType
 
@@ -54,28 +52,13 @@ _BYE = None  # sentinel used by the circle method for an odd participant count
 
 
 def build_combos(dev_ids: list[int]) -> list[Combo]:
-    """Return every distinct daily combo for the given ordered developer ids."""
-    if len(dev_ids) == 5:
-        return _build_combos_triple_plus_pair(dev_ids)
+    """Return every distinct daily combo for the given ordered developer ids.
+
+    Always uses the circle method so every assignment is a two-person pair
+    (odd counts get a rotating SOLO slot). No three-person pairs are ever
+    produced (operator rule: "ab do bandon ka hi pair banega").
+    """
     return _build_combos_circle(dev_ids)
-
-
-def _build_combos_triple_plus_pair(dev_ids: list[int]) -> list[Combo]:
-    """Five developers → one triple + one pair per combo (10 rotations)."""
-    combos: list[Combo] = []
-    for idx, pair in enumerate(combinations(dev_ids, 2)):
-        pair_ids = frozenset(pair)
-        triple = tuple(d for d in dev_ids if d not in pair_ids)
-        combos.append(
-            Combo(
-                idx,
-                (
-                    Pair(triple[0], triple[1], PairType.DEV, member_c=triple[2]),
-                    Pair(pair[0], pair[1], PairType.DEV),
-                ),
-            )
-        )
-    return combos
 
 
 def _build_combos_circle(dev_ids: list[int]) -> list[Combo]:

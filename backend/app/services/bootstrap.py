@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db.base import Base, SessionLocal, engine
 from app.db.models import Member
@@ -22,9 +22,38 @@ _SEED_MEMBERS = [
     ("Faz", Role.DEVELOPER, "@faz:matrix.org"),
     ("Hamza", Role.DEVELOPER, "@hamza:matrix.org"),
     ("Farhan", Role.DEVELOPER, "@farhan12:matrix.org"),
+    ("Mohsin", Role.DEVELOPER, "@mohsinashraf:matrix.org"),
     ("Habiba", Role.QA, "@habiba:matrix.org"),
     ("Aqeel", Role.QA, "@aqeel:matrix.org"),
 ]
+
+# Members ensured on every boot (idempotent, keyed by Matrix ID) so existing
+# databases — including Railway — pick up roster additions after a redeploy.
+_ENSURE_MEMBERS = [
+    ("Mohsin", Role.DEVELOPER, "@mohsinashraf:matrix.org"),
+]
+
+
+def _ensure_members(db) -> None:
+    """Add roster members that are missing, matched on their Matrix ID."""
+    changed = False
+    for name, role, mxid in _ENSURE_MEMBERS:
+        exists = db.scalar(select(Member).where(Member.matrix_user_id == mxid))
+        if exists is not None:
+            continue
+        max_order = db.scalar(select(func.max(Member.lead_order))) or 0
+        db.add(
+            Member(
+                name=name,
+                role=role.value,
+                matrix_user_id=mxid,
+                active=True,
+                lead_order=max_order + 1,
+            )
+        )
+        changed = True
+    if changed:
+        db.commit()
 
 
 def init_db() -> None:
@@ -43,6 +72,7 @@ def init_db() -> None:
                     )
                 )
             db.commit()
+        _ensure_members(db)
 
     from pathlib import Path
 
@@ -50,6 +80,14 @@ def init_db() -> None:
     from app.services import room_feed_cache_db
 
     cache_file = Path(settings.matrix_e2ee_store_path).resolve().parent / "member_feed_cache.json"
+    # Always merge the local Element mirror into Postgres so dashboard / performance
+    # read the same room timeline on every boot (local + Railway after volume sync).
+    try:
+        imported = room_feed_cache_db.import_json_file(cache_file)
+        if imported:
+            logging.getLogger(__name__).info("Synced %d message(s) from member_feed_cache.json", imported)
+    except Exception:
+        logging.getLogger(__name__).debug("member_feed_cache sync skipped", exc_info=True)
     room_feed_cache_db.seed_from_file_if_empty(cache_file)
     count = room_feed_cache_db.seed_bundled_cache()
     if count:

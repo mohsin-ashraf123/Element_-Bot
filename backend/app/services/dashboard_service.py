@@ -97,8 +97,9 @@ def build_fast_feed(db: Session, *, zone_name: str | None = None) -> list[dict]:
 
 
 def build_feed(db: Session, *, force: bool = False) -> dict:
-    """Room timelines + analysis — live Matrix fetch, DB/cache fallback."""
+    """Room timelines + analysis — Element-style room mirror, then analyze today."""
     from app.services import matrix_room_feed
+    from datetime import timedelta
 
     schedule = settings_service.get_setting(db, "schedule")
     zone_name = schedule.get("timezone", settings.timezone)
@@ -112,57 +113,64 @@ def build_feed(db: Session, *, force: bool = False) -> dict:
 
     pairing_id = settings.matrix_room_id
     task_id = settings.matrix_task_room_id.strip()
-    month_start, month_end = month_bounds(datetime.now(tz(zone_name)).date())
+    today = datetime.now(tz(zone_name)).date()
+    month_start, month_end = month_bounds(today)
+    # Pull a few days of Matrix history so the phone preview matches Element
+    # (no "today-only" cut on the room display).
+    sync_start = today - timedelta(days=7)
 
-    if force:
-        matrix_room_feed.invalidate_cache()
+    # --- Display: full recent room timeline (same order as Element), no day filter.
+    db_bot = _bot_events_from_db(db, zone_name, days=7)
+    room_messages = matrix_room_feed.combine_feed_sources(
+        matrix_room_feed.recent_room_timeline(pairing_id, zone_name=zone_name, limit=50),
+        db_bot,
+    )
 
-    db_bot = _bot_events_from_db(db, zone_name)
+    task_messages: list[dict] = []
+    if task_id:
+        task_messages = matrix_room_feed.recent_room_timeline(
+            task_id, zone_name=zone_name, limit=50
+        )
 
-    live_pairing = matrix_room_feed.fetch_pairing_today_live(
+    # --- Analysis / performance still use today's slice of the same mirror.
+    today_for_analysis = matrix_room_feed.filter_messages_for_day(
+        room_messages, day=today, zone_name=zone_name
+    )
+    task_for_analysis = matrix_room_feed.filter_messages_for_day(
+        task_messages, day=today, zone_name=zone_name
+    ) or task_messages
+
+    # --- Keep the DB fresh in the background (last 7 days of both rooms).
+    matrix_room_feed.schedule_refresh(
         room_id=pairing_id,
         zone_name=zone_name,
         mxid_to_name=mxid_to_name,
         force=force,
+        range_start=sync_start,
+        range_end=today,
     )
-    today_messages = matrix_room_feed.combine_feed_sources(live_pairing, db_bot)
-
-    task_messages: list[dict] = []
     if task_id:
-        task_messages = matrix_room_feed.resolve_task_messages(
+        matrix_room_feed.schedule_refresh(
             room_id=task_id,
             zone_name=zone_name,
             mxid_to_name=mxid_to_name,
+            force=force,
             range_start=month_start,
             range_end=month_end,
         )
 
-    refreshing = matrix_room_feed.feed_incomplete(today_messages)
-    if refreshing:
-        matrix_room_feed.schedule_refresh(
-            room_id=pairing_id,
-            zone_name=zone_name,
-            mxid_to_name=mxid_to_name,
-            force=True,
-        )
-    if task_id and not task_messages:
-        matrix_room_feed.schedule_refresh(
-            room_id=task_id,
-            zone_name=zone_name,
-            mxid_to_name=mxid_to_name,
-            force=True,
-            range_start=month_start,
-            range_end=month_end,
-        )
+    refreshing = matrix_room_feed.feed_incomplete(today_for_analysis)
 
     try:
+        # Feed stays heuristic (instant). LLM enrichment belongs to /analysis/run
+        # and report generation so the dashboard never blocks on OpenRouter.
         analysis = analysis_service.analyze_today(
             db,
-            pairing_messages=today_messages,
-            task_messages=task_messages,
+            pairing_messages=today_for_analysis,
+            task_messages=task_for_analysis,
             zone_name=zone_name,
             force=force,
-            llm=force,
+            llm=False,
         )
     except Exception:
         logger.exception("Feed analysis failed — returning messages without analysis")
@@ -177,14 +185,14 @@ def build_feed(db: Session, *, force: bool = False) -> dict:
         }
 
     return {
-        "today_messages": today_messages,
+        "today_messages": room_messages,
         "task_messages": task_messages,
         "task_month_start": month_start.isoformat(),
         "task_month_end": month_end.isoformat(),
         "task_week_start": month_start.isoformat(),
         "task_week_end": month_end.isoformat(),
         "analysis": analysis,
-        "feed_cached": not refreshing and bool(matrix_room_feed.peek_cached(pairing_id)),
+        "feed_cached": bool(room_messages),
         "feed_refreshing": refreshing,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
@@ -217,47 +225,30 @@ def today_room_messages(
     *,
     room_id: str | None = None,
 ) -> list[dict]:
-    """Today's room feed: live Matrix timeline (members + bot), DB fallback."""
+    """Element-style room mirror (recent messages). Callers that need 'today'
+    only should run filter_messages_for_day themselves."""
     from app.services import matrix_room_feed
 
     target = room_id or settings.matrix_room_id
-    mxid_to_name = {
-        m.matrix_user_id: m.name
-        for m in team_service.list_members(db)
-        if m.matrix_user_id
-    }
-    live = matrix_room_feed.fetch_today_messages(
-        room_id=target,
-        zone_name=zone_name,
-        mxid_to_name=mxid_to_name,
-        block=False,
+    recent = matrix_room_feed.recent_room_timeline(
+        target, zone_name=zone_name, limit=50
     )
-    if live:
-        return live
     if target == settings.matrix_room_id:
-        return _bot_events_from_db(db, zone_name)
-    return []
+        return matrix_room_feed.combine_feed_sources(
+            recent, _bot_events_from_db(db, zone_name, days=7)
+        )
+    return recent
 
 
 def month_task_messages(db: Session, zone_name: str) -> list[dict]:
-    """This month's messages from the task-assignment room (read-only)."""
+    """Recent messages from the task-assignment room (Element-style mirror)."""
     from app.services import matrix_room_feed
 
     task_id = settings.matrix_task_room_id.strip()
     if not task_id:
         return []
-    mxid_to_name = {
-        m.matrix_user_id: m.name
-        for m in team_service.list_members(db)
-        if m.matrix_user_id
-    }
-    start, end = month_bounds(datetime.now(tz(zone_name)).date())
-    return matrix_room_feed.resolve_task_messages(
-        room_id=task_id,
-        zone_name=zone_name,
-        mxid_to_name=mxid_to_name,
-        range_start=start,
-        range_end=end,
+    return matrix_room_feed.recent_room_timeline(
+        task_id, zone_name=zone_name, limit=50
     )
 
 
@@ -271,11 +262,13 @@ def today_task_messages(db: Session, zone_name: str) -> list[dict]:
     return month_task_messages(db, zone_name)
 
 
-def _bot_events_from_db(db: Session, zone_name: str) -> list[dict]:
-    """Fallback when Matrix timeline is unavailable."""
+def _bot_events_from_db(db: Session, zone_name: str, *, days: int = 1) -> list[dict]:
+    """Bot posts from ElementEvent — last ``days`` days (default today)."""
+    from datetime import timedelta
+
     zone = tz(zone_name)
     now = datetime.now(zone)
-    start = datetime.combine(now.date(), time.min, tzinfo=zone)
+    start = datetime.combine(now.date() - timedelta(days=max(days - 1, 0)), time.min, tzinfo=zone)
     end = datetime.combine(now.date(), time.max, tzinfo=zone)
 
     rows = db.scalars(
