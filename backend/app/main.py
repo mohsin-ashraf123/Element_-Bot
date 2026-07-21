@@ -33,13 +33,20 @@ def _cors_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create tables + seed defaults on startup (dev). Alembic owns this in prod.
-    init_db()
-
     import logging
-    import threading
 
     logging.basicConfig(level=logging.INFO)
+    log = logging.getLogger(__name__)
+
+    try:
+        init_db()
+        log.info("Database bootstrap complete")
+    except Exception as exc:
+        # Do not crash the process — Railway healthcheck must reach /api/health/live
+        # even when DATABASE_URL is missing or Postgres is still starting.
+        log.error("Database bootstrap failed (API will start; DB endpoints may fail): %s", exc)
+
+    import threading
 
     from app.services.feed_hub import get_hub
     from app.services.matrix_e2ee import warm_store

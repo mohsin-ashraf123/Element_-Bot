@@ -13,6 +13,16 @@ from app.db.session import get_db
 router = APIRouter(tags=["health"])
 
 
+@router.get("/health/live")
+def health_live() -> dict:
+    """Liveness probe — no DB; used by Railway/Fly before Postgres is ready."""
+    return {
+        "status": "ok",
+        "message": "PairFlow API process is up",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/health")
 def health(db: Session = Depends(get_db)) -> dict:
     try:
