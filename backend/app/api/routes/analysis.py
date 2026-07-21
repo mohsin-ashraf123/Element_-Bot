@@ -2,33 +2,39 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.services import analysis_service, dashboard_service, performance_service, settings_service
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analysis", tags=["analysis"])
 
 
 @router.get("/today")
 def today(db: Session = Depends(get_db)) -> dict:
-    schedule = settings_service.get_setting(db, "schedule")
-    zone_name = schedule.get("timezone", settings.timezone)
-    pairing = dashboard_service.today_room_messages(
-        db, zone_name, room_id=settings.matrix_room_id
-    )
-    task = dashboard_service.today_task_messages(db, zone_name)
-    return analysis_service.analyze_today(
-        db,
-        pairing_messages=pairing,
-        task_messages=task,
-        zone_name=zone_name,
-        force=True,
-    )
+    try:
+        schedule = settings_service.get_setting(db, "schedule")
+        zone_name = schedule.get("timezone", settings.timezone)
+        pairing = dashboard_service.today_room_messages(
+            db, zone_name, room_id=settings.matrix_room_id
+        )
+        task = dashboard_service.today_task_messages(db, zone_name)
+        return analysis_service.analyze_today(
+            db,
+            pairing_messages=pairing,
+            task_messages=task,
+            zone_name=zone_name,
+            force=True,
+        )
+    except Exception as exc:
+        logger.exception("Analysis today failed")
+        raise HTTPException(status_code=503, detail="Analysis temporarily unavailable") from exc
 
 
 @router.post("/run")

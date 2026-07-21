@@ -204,17 +204,17 @@ export const getMe = () =>
   api.get<{ username: string }>("/auth/me").then((r) => r.data);
 
 export const getStatus = () =>
-  api.get<BotStatus>("/dashboard/status", { timeout: 15_000 }).then((r) => r.data);
+  api.get<BotStatus>("/dashboard/status", { timeout: 30_000 }).then((r) => r.data);
 
 export const getFeed = (force = false) =>
   api
     .get<DashboardFeed>("/dashboard/feed", {
       params: force ? { force: true } : undefined,
-      timeout: 180_000,
+      timeout: 60_000,
     })
     .then((r) => r.data);
 export const getToday = () =>
-  api.get<RoundPreview>("/dashboard/today", { timeout: 15_000 }).then((r) => r.data);
+  api.get<RoundPreview>("/dashboard/today", { timeout: 30_000 }).then((r) => r.data);
 export const runAnalysis = () =>
   api.post<TodayAnalysis>("/analysis/run", undefined, { timeout: 180_000 }).then((r) => r.data);
 
@@ -223,7 +223,7 @@ export const getPerformance = (scope: PerformanceScope = "today") =>
     .get<PerformanceView>("/analysis/performance", { params: { scope }, timeout: 30_000 })
     .then((r) => r.data);
 export const getMembers = () =>
-  api.get<Member[]>("/team/members").then((r) => r.data);
+  api.get<Member[]>("/team/members", { timeout: 30_000 }).then((r) => r.data);
 export const getLeadPreview = () =>
   api.get<{ next_leads: string[] }>("/team/lead-preview").then((r) => r.data);
 export const getHistory = () => api.get("/rounds/history").then((r) => r.data);

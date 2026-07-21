@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, time, timezone
 
 from sqlalchemy import select, text
@@ -11,6 +12,8 @@ from app.core.config import settings
 from app.db.models import ElementEvent, Member, PairingRound
 from app.domain.calendar import is_working_day, month_bounds, next_working_day, parse_hhmm, parse_working_days, send_datetime_for, tz
 from app.services import analysis_service, element_health, settings_service, team_service
+
+logger = logging.getLogger(__name__)
 
 
 def build_status(db: Session) -> dict:
@@ -185,14 +188,26 @@ def build_feed(db: Session, *, force: bool = False) -> dict:
 
         feed_cached = matrix_room_feed.cache_age(pairing_id) is not None and not refreshing
 
-    analysis = analysis_service.analyze_today(
-        db,
-        pairing_messages=today_messages,
-        task_messages=task_messages,
-        zone_name=zone_name,
-        force=force,
-        llm=force,
-    )
+    try:
+        analysis = analysis_service.analyze_today(
+            db,
+            pairing_messages=today_messages,
+            task_messages=task_messages,
+            zone_name=zone_name,
+            force=force,
+            llm=force,
+        )
+    except Exception:
+        logger.exception("Feed analysis failed — returning messages without analysis")
+        analysis = {
+            "date": datetime.now(tz(zone_name)).date().isoformat(),
+            "analyzed_at": datetime.now(tz(zone_name)).isoformat(),
+            "source": "error",
+            "summary": "Analysis temporarily unavailable.",
+            "attendance": [],
+            "suggestion_ranking": [],
+            "stats": {"total": 0, "completed": 0, "on_time": 0, "missed": 0, "with_suggestions": 0},
+        }
 
     return {
         "today_messages": today_messages,

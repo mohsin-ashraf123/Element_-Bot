@@ -722,17 +722,15 @@ def resolve_task_messages(
     )
     if merged:
         return merged
-    try:
-        return fetch_task_month_messages(
-            room_id=room_id,
-            zone_name=zone_name,
-            mxid_to_name=mxid_to_name,
-            stale_ok=False,
-            block=True,
-        )
-    except Exception:
-        logger.exception("Task room month fetch failed for %s", room_id)
-        return merged
+    schedule_refresh(
+        room_id=room_id,
+        zone_name=zone_name,
+        mxid_to_name=mxid_to_name,
+        force=True,
+        range_start=range_start,
+        range_end=range_end,
+    )
+    return merged
 
 
 def fetch_today_messages(
