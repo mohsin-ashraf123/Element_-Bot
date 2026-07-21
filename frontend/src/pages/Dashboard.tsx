@@ -71,9 +71,9 @@ export function Dashboard() {
     };
 
     loadFast();
-    loadFeed();
+    loadFeed(true);
     const fastId = window.setInterval(loadFast, 20_000);
-    const feedId = window.setInterval(() => loadFeed(false), 60_000);
+    const feedId = window.setInterval(() => loadFeed(true), 45_000);
     return () => {
       window.clearInterval(fastId);
       window.clearInterval(feedId);

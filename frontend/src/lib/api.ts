@@ -206,11 +206,11 @@ export const getMe = () =>
 export const getStatus = () =>
   api.get<BotStatus>("/dashboard/status", { timeout: 30_000 }).then((r) => r.data);
 
-export const getFeed = (force = false) =>
+export const getFeed = (force = true) =>
   api
     .get<DashboardFeed>("/dashboard/feed", {
       params: force ? { force: true } : undefined,
-      timeout: 60_000,
+      timeout: 120_000,
     })
     .then((r) => r.data);
 export const getToday = () =>

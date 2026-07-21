@@ -742,28 +742,51 @@ def resolve_task_messages(
     range_start: date,
     range_end: date,
 ) -> list[dict]:
-    """Task-room feed: in-memory cache + persisted month cache (always merged)."""
+    """Task-room feed — live Matrix fetch with DB/file cache fallback."""
     if not room_id:
         return []
-    cached = peek_cached(room_id) or []
-    merged = merge_member_cache(
-        room_id,
-        cached,
-        zone_name=zone_name,
-        since=range_start,
-        until=range_end,
-    )
-    if merged:
-        return merged
-    schedule_refresh(
-        room_id=room_id,
-        zone_name=zone_name,
-        mxid_to_name=mxid_to_name,
-        force=True,
-        range_start=range_start,
-        range_end=range_end,
-    )
-    return merged
+    try:
+        return fetch_messages(
+            room_id=room_id,
+            zone_name=zone_name,
+            mxid_to_name=mxid_to_name,
+            range_start=range_start,
+            range_end=range_end,
+            stale_ok=True,
+            block=True,
+        )
+    except Exception:
+        logger.exception("Task room live fetch failed for %s", room_id)
+        return merge_member_cache(
+            room_id,
+            [],
+            zone_name=zone_name,
+            since=range_start,
+            until=range_end,
+        )
+
+
+def fetch_pairing_today_live(
+    *,
+    room_id: str,
+    zone_name: str,
+    mxid_to_name: dict[str, str],
+    force: bool = False,
+) -> list[dict]:
+    """Today's pairing-room messages — always read from Matrix (cache/DB on failure)."""
+    if not room_id:
+        return []
+    try:
+        return fetch_today_messages(
+            room_id=room_id,
+            zone_name=zone_name,
+            mxid_to_name=mxid_to_name,
+            stale_ok=not force,
+            block=True,
+        )
+    except Exception:
+        logger.exception("Pairing room live fetch failed for %s", room_id)
+        return merge_member_cache(room_id, [], zone_name=zone_name)
 
 
 def fetch_today_messages(

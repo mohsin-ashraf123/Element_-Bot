@@ -97,7 +97,7 @@ def build_fast_feed(db: Session, *, zone_name: str | None = None) -> list[dict]:
 
 
 def build_feed(db: Session, *, force: bool = False) -> dict:
-    """Room timelines + analysis — instant DB/cache first, Matrix refresh in background."""
+    """Room timelines + analysis — live Matrix fetch, DB/cache fallback."""
     from app.services import matrix_room_feed
 
     schedule = settings_service.get_setting(db, "schedule")
@@ -117,76 +117,43 @@ def build_feed(db: Session, *, force: bool = False) -> dict:
     if force:
         matrix_room_feed.invalidate_cache()
 
-    refreshing = False
-    if force:
-        feeds = matrix_room_feed.fetch_rooms_parallel(
-            room_ids=[pairing_id],
+    db_bot = _bot_events_from_db(db, zone_name)
+
+    live_pairing = matrix_room_feed.fetch_pairing_today_live(
+        room_id=pairing_id,
+        zone_name=zone_name,
+        mxid_to_name=mxid_to_name,
+        force=force,
+    )
+    today_messages = matrix_room_feed.combine_feed_sources(live_pairing, db_bot)
+
+    task_messages: list[dict] = []
+    if task_id:
+        task_messages = matrix_room_feed.resolve_task_messages(
+            room_id=task_id,
             zone_name=zone_name,
             mxid_to_name=mxid_to_name,
-            stale_ok=False,
-            block=True,
+            range_start=month_start,
+            range_end=month_end,
         )
-        today_messages = feeds.get(pairing_id) or []
-        today_messages = matrix_room_feed.combine_feed_sources(
-            today_messages,
-            _bot_events_from_db(db, zone_name),
+
+    refreshing = matrix_room_feed.feed_incomplete(today_messages)
+    if refreshing:
+        matrix_room_feed.schedule_refresh(
+            room_id=pairing_id,
+            zone_name=zone_name,
+            mxid_to_name=mxid_to_name,
+            force=True,
         )
-        today_messages = matrix_room_feed.merge_member_cache(
-            pairing_id, today_messages, zone_name=zone_name
+    if task_id and not task_messages:
+        matrix_room_feed.schedule_refresh(
+            room_id=task_id,
+            zone_name=zone_name,
+            mxid_to_name=mxid_to_name,
+            force=True,
+            range_start=month_start,
+            range_end=month_end,
         )
-        if task_id:
-            task_messages = matrix_room_feed.resolve_task_messages(
-                room_id=task_id,
-                zone_name=zone_name,
-                mxid_to_name=mxid_to_name,
-                range_start=month_start,
-                range_end=month_end,
-            )
-        else:
-            task_messages = []
-    else:
-        db_bot = _bot_events_from_db(db, zone_name)
-        today_messages = matrix_room_feed.combine_feed_sources(
-            matrix_room_feed.merge_member_cache(pairing_id, [], zone_name=zone_name),
-            db_bot,
-        )
-        cached = matrix_room_feed.peek_cached(pairing_id)
-        if cached:
-            today_messages = matrix_room_feed.combine_feed_sources(cached, today_messages)
-
-        if task_id:
-            task_messages = matrix_room_feed.resolve_task_messages(
-                room_id=task_id,
-                zone_name=zone_name,
-                mxid_to_name=mxid_to_name,
-                range_start=month_start,
-                range_end=month_end,
-            )
-        else:
-            task_messages = []
-
-        # Always background-refresh so new member messages (e.g. after bot send) appear.
-        age = matrix_room_feed.cache_age(pairing_id)
-        if age is None or age >= 30:
-            refreshing = matrix_room_feed.schedule_refresh(
-                room_id=pairing_id,
-                zone_name=zone_name,
-                mxid_to_name=mxid_to_name,
-                force=True,
-            ) or refreshing
-
-        if task_id:
-            task_age = matrix_room_feed.cache_age(task_id)
-            if not task_messages or task_age is None or task_age >= 30:
-                refreshing = matrix_room_feed.schedule_refresh(
-                    room_id=task_id,
-                    zone_name=zone_name,
-                    mxid_to_name=mxid_to_name,
-                    range_start=month_start,
-                    range_end=month_end,
-                ) or refreshing
-
-        feed_cached = matrix_room_feed.cache_age(pairing_id) is not None and not refreshing
 
     try:
         analysis = analysis_service.analyze_today(
@@ -218,7 +185,7 @@ def build_feed(db: Session, *, force: bool = False) -> dict:
         "task_week_end": month_end.isoformat(),
         "analysis": analysis,
         "feed_cached": not refreshing and bool(matrix_room_feed.peek_cached(pairing_id)),
-        "feed_refreshing": refreshing or matrix_room_feed.feed_incomplete(today_messages),
+        "feed_refreshing": refreshing,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
